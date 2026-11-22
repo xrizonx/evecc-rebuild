@@ -70,8 +70,8 @@ bash scripts/build-linux.sh --jobs 2 --test
 ```
 
 The script validates the essential tools, configures native dependencies and
-builds on your own machine. For direct CMake control, use the equivalent steps
-below.
+builds on your own machine. `--clang` uses a separate `build-clang/` directory
+by default. For direct CMake control, use the equivalent steps below.
 
 ```bash
 cmake -S . -B build -G Ninja \
@@ -172,9 +172,17 @@ cd work
 ```
 
 You can also run `./build/evecc console`, `runscript -i <file>`,
-`unpyj -i <file> -o <file>`, and `--help` (when their required keys and runtime
-are present). Use `--no-cache` to force recompilation. `cleancache` removes
+`unpyj -i <file> -o <file>`, and `--help`. `console` and `runscript` work with
+the embedded interpreter without requiring EVE key files; cryptographic
+operations do still require valid keys. Use `--no-cache` to force recompilation. `cleancache` removes
 the local `.build_cache` folder.
+
+**Key files are not overwritten automatically.** If you already have an
+`evecc.keys.pub`/`evecc.keys.priv` pair or extracted `ccp.keys.*` files,
+back them up before regeneration. A different signing key invalidates previously
+signed output unless the matching public key is deployed. `dumpcode` also
+requires an output directory that does not already exist, to avoid mixing old
+and new extracted sources.
 
 **Keep `evecc.keys.priv` and `ccp.keys.crypt` private.** Generated `compiled.code`
 may still need the **external** `eveloader2` public-key patch on its supported
@@ -217,6 +225,26 @@ Run the Windows commands from an appropriate **Visual Studio x64 Developer
 Command Prompt**. Windows builds after the CMake refactor have not yet been
 re-validated; use the last known-good Windows release if you need it immediately.
 
+A safer Windows example is in `build_and_run.bat`: it reads `EVECC_DIR`,
+`EVE_SOURCE_DIR`, and `EVECC_PASSWORD` from your environment and optionally
+copies the result to `EVELOADER2_SCRIPT_DIR`. It **does not** delete client
+files or automatically launch the game. Review all paths and make a backup
+before running it.
+
+## Second-pass source and documentation audit
+
+The [audit checklist](docs/audit.md) records which first-party files were
+reviewed, defects corrected, manual checks available, and unresolved tests.
+Notable corrections include the CryptoAPI RSA private-key encryption offset,
+Windows `-k ccp` key selection, extraction output safety, the old bundled
+zlib header collision, key-file overwrite protection, and improved Linux
+runtime documentation. The `.gitignore` now excludes client key material and
+local build files to help prevent accidental commits.
+
+**Only the actual Linux native build and compatibility with your original
+client files can determine whether all commands work correctly.** No new
+CI/CD build or workflow is included.
+
 ## Port progress
 
 | Area | State |
@@ -231,6 +259,7 @@ re-validated; use the last known-good Windows release if you need it immediately
 | Optional `uncompyle6` runtime dependencies | Not yet bundled (`xdis`, `spark-parser`) |
 | External `eveloader2` and EVE client | Out of scope for this repository |
 | GitHub Actions CI/CD | Disabled; manual local builds only |
+| Second-pass first-party code review | Completed; see `docs/audit.md` for findings and remaining verification |
 | `scripts/build-linux.sh` helper | Implemented; no hosted build service required |
 
 **Important:** EVECC preserves historical Python 2.7, SHA-1 and 3DES for
