@@ -187,25 +187,40 @@ int cmd_compilelib(cmd_args *args) {
 
 
 static const char *help_text = R"ADFAAF(
-%s(%s): Compile EVE legacy client code
+EVECC (%s): EVE legacy compiled.code toolkit
 
-  commands:
-    genkeys                            | generate several necessary files
-    dumpkeys -i <file>                 | dump CCP's keys. supply path to clean blue.dll
-    dumpcode -i <file>                 | dump and decompile .code file
-    compilecode [-I <dir>]{--no-cache} | compile .code file, provide all needed dirs per documentation
-    unpyj -i <file>                    | dump .pyj file (or really any JumbleString data)
-    compilelib                       * | compile .lib file (currently this is non-functional)
-    dumplib -i <file>                * | dump and decompile .ccp file
-    help or --help or -h               | print this message
-    runscript -i <file>                | run python script in the evecc environment
-    console                            | start a python console in the evecc environment
+USAGE:
+  evecc genkeys --password <secret>
+      Generate your own RSA signing keypair in this working directory.
+  evecc dumpkeys -i <blue.dll>
+      Extract the original client RSA public / 3DES key blobs as data.
+  evecc dumpcode -i <compiled.code> -o <new-folder>
+      Decrypt and decompile a trusted compiled.code file.
+  evecc compilecode -o <compiled.code> -I <source-dir> [-I <source-dir> ...]
+      Compile edited Python 2.7 code from one or more directories.
+  evecc unpyj -i <encrypted-file> -o <decoded-file>
+      Decode a legacy JumbleString object.
+  evecc cleancache
+      Remove the build cache in the current working directory.
+  evecc runscript -i <script.py> | console | help
+      Use the embedded Python 2.7 environment.
 
-    * signifies non-functional commands
-    --no-cache: disables build caching
+OPTIONS:
+  --password <secret>  Required for genkeys; use the same secret to sign code.
+  -k ccp|roaming       Select legacy encryption key (default: roaming).
+  --no-cache           Disable source compilation caching for this invocation.
+  --help, -h           Show this help.
+
+NOTES:
+  - The Python runtime must remain beside the evecc executable in Python/.
+  - Signing and extracted key files must be available in the current directory.
+  - Existing key files and dumpcode output directories are not overwritten.
+  - compilelib/dumplib were marked non-functional in the upstream project.
+  - This command-line app does not run EVE or the external eveloader2 launcher.
 )ADFAAF";
+
 int cmd_help() {
-	printf(help_text, "evecc", GIT_HASH);
+	printf(help_text, GIT_HASH);
 
 	return 0;
 }
