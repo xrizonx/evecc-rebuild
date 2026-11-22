@@ -1,6 +1,16 @@
 # evecc
 evecc is a tool for generating compiled.code files EVE online build 360229.
 
+## Native Linux (Debian / Ubuntu)
+
+EVECC can now be compiled as a native Linux ELF executable with GCC or Clang,
+an embedded Python 2.7.13 runtime, OpenSSL cryptography and portable
+filesystem/cache operations. For package installation, compilation, running
+commands, and compatibility limitations, see **[docs/linux.md](docs/linux.md)**.
+
+The repository does **not** include the EVE game or the external
+Windows-only eveloader2 launcher. Those programs must be ported separately.
+
 ## getting started
 Before starting, please make sure you have a copy of eveloader2 to run your code files.
 1. generate new keys
