@@ -69,7 +69,6 @@ target_include_directories(evecc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/vendor"
     "${CMAKE_CURRENT_BINARY_DIR}/gen"
     "${CMAKE_CURRENT_BINARY_DIR}/vendor/Python-2.7.13/Include"
-    "${CMAKE_CURRENT_BINARY_DIR}/vendor/Python-2.7.13/PC"
     "${CMAKE_CURRENT_BINARY_DIR}/vendor/python-cmake-buildsystem/include"
     "${CMAKE_CURRENT_BINARY_DIR}/vendor/python-cmake-buildsystem/bin"
     "${CMAKE_CURRENT_BINARY_DIR}/vendor/python-cmake-buildsystem/bin/PC"
@@ -79,6 +78,7 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(evecc PRIVATE OpenSSL::Crypto)
 endif()
 if(WIN32)
+    target_include_directories(evecc PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/vendor/Python-2.7.13/PC")
     target_compile_definitions(evecc PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_link_libraries(evecc PRIVATE
         advapi32 ws2_32 user32 shell32 ole32 oleaut32 rpcrt4
