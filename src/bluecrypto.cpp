@@ -497,7 +497,7 @@ std::string hex_string(char *data, int len) {
     return ss.str();
 }
 
-keys_blob *load_keys_blob(char *prefix) {
+keys_blob *load_keys_blob(const char *prefix) {
     LOG_F(INFO,"loading keys blobs for prefix: %s", prefix);
     keys_blob *keys = new keys_blob;
     std::string base = std::string(prefix);
@@ -571,7 +571,7 @@ keys_blob::keys_blob() {
     memset(this, 0, sizeof(*this));
 }
 
-void keys_blob::dump(char *prefix) {
+void keys_blob::dump(const char *prefix) {
     LOG_F(INFO,"dumping keys with prefix: %s", prefix);
     std::string base = std::string(prefix);
     std::string pub_filename = base + "pub";
