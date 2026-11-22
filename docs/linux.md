@@ -284,7 +284,9 @@ computer. Use `ldd evecc` there to find any missing dependencies.
   decompiler tries `uncompyle2` first and falls back to `uncompyle6`.
   This dependency integration requires a successful local smoke test before
   being considered verified.
-- `compilelib` and `dumplib` were already considered non-functional upstream.
+- `compilelib` and `dumplib` were marked nonfunctional upstream. They
+  now have experimental native pack/unpack implementations and a synthetic
+  local test, but real-client archive compatibility has **not** been verified.
 - The repository now has a multi-stage native Linux Dockerfile and an
   optional Compose workflow. See [Docker instructions](docker.md).
 - The separate game client and external Windows-only `eveloader2` are not
