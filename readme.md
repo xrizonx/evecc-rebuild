@@ -87,7 +87,7 @@ The program and bundled runtime are expected at:
 build/
 ├── evecc                     # Native Linux ELF binary
 └── Python/
-    ├── Lib/                  # Python 2.7.13 standard library
+    ├── lib/python2.7/        # Linux Python 2.7.13 standard library
     ├── uncompyle2.zip
     └── uncompyle6.zip
 ```
@@ -174,7 +174,7 @@ not part of this native Linux build.
 | `makedev` / `major` / `minor` undefined | Pull latest CMake compatibility fixes; remove old `build` and reconfigure |
 | `_cursesmodule.c` fails against ncurses | Use latest branch; CMake sets `ENABLE_CURSES=OFF` |
 | `_ssl` / `_hashlib` against OpenSSL 3 fails | Use the exact CMake options shown above |
-| `Missing embedded Python runtime` | Keep `build/evecc` beside the entire `build/Python/` directory |
+| `Missing embedded Python runtime` | Keep `build/evecc` beside `build/Python/`; on Linux the standard library lives under `Python/lib/python2.7/` |
 | Missing shared library reported by `ldd` | Install the matching library package on the target Linux system |
 | Key loading/signature fails | Validate `blue.dll` version, generated key blobs and password; CryptoAPI compatibility needs real-client testing |
 | Build runs out of RAM | Retry with `cmake --build build --parallel 1` |
