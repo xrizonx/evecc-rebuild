@@ -10,7 +10,8 @@ Windows-only `eveloader2` launcher on Linux.
 > CryptoAPI interoperability with real client key blobs still require
 > local verification. Do not assume production/client compatibility until
 > the full round-trip tests pass. The original `compilelib`/`dumplib` modes
-> were already marked non-functional.
+> were marked non-functional upstream and are now reworked experimentally,
+> without real-client validation.
 >
 > **CI/CD:** No Linux GitHub Actions workflow is used. Linux builds are
 > performed manually on your PC or server to avoid GitHub Actions minutes.
@@ -291,7 +292,7 @@ CI/CD build or workflow is included.
 | Embedded Python 2.7.13 | Configured; modern Linux compatibility work ongoing |
 | OpenSSL RSA/SHA1 and 3DES legacy key support | Implemented experimentally; verify against original client files |
 | Synthetic local test harness | Added; not yet fully validated |
-| `compilelib` / `dumplib` | Still unverified/nonfunctional upstream |
+| `compilelib` / `dumplib` | Reworked experimental encrypted-library ZIP import/export; synthetic test added, real-client verification pending |
 | `uncompyle6` runtime dependencies | SHA-256-pinned Py2 wheels bundled in `uncompyle6.zip`; integration test pending |
 | Native Docker build/image/archive | Multi-stage Dockerfile, BuildKit caching, Compose and export; local build pending |
 | External `eveloader2` and EVE client | Out of scope for this repository |
