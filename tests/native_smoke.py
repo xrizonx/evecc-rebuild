@@ -111,6 +111,15 @@ def main():
         run(["openssl", "dgst", "-sha1", "-verify", pem_file,
              "-signature", sig_file, signed_bytes], root)
 
+        # Exercise the decompiler as well as the compiler. The embedded
+        # filename is mapped safely into the requested fresh output folder.
+        decompiled = root / "decompiled"
+        run([binary, "dumpcode", "--password", password,
+             "-i", output, "-o", decompiled], root)
+        generated_source = decompiled / "script" / "eve" / "client" / "native_port_test.py"
+        assert generated_source.is_file(), generated_source
+        assert generated_source.stat().st_size > 0
+
         (_, encrypted) = records[0]
         code_bytes, _sort_key = encrypted
         code_file = root / "test.pyj"
