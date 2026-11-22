@@ -51,7 +51,11 @@ int main(int argc, char** argv) {
     if (!ec) binary = proc_binary;
 #endif
     const fs::path python_dir = binary.parent_path() / "Python";
+#ifdef _WIN32
     const fs::path stdlib = python_dir / "Lib";
+#else
+    const fs::path stdlib = python_dir / "lib" / "python2.7";
+#endif
     const fs::path uncompyle2 = python_dir / "uncompyle2.zip";
     const fs::path uncompyle6 = python_dir / "uncompyle6.zip";
 
@@ -79,6 +83,14 @@ int main(int argc, char** argv) {
     Py_SetProgramName(const_cast<char*>(program.c_str()));
     Py_Initialize();
     PySys_SetPath(const_cast<char*>(py_path.c_str()));
+    // Import the codecs registry after sys.path is populated. Python 2.7 may
+    // initialize without it when embedded into a non-system executable.
+    if (PyRun_SimpleString("import encodings, codecs\\ncodecs.lookup('utf-8')") != 0) {
+        LOG_F(ERROR, "Unable to initialize Python 2.7 encodings from %s",
+              stdlib.string().c_str());
+        Py_Finalize();
+        return 2;
+    }
     initblue();
 
     cmd_args args;
