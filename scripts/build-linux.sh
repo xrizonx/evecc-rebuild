@@ -10,6 +10,8 @@ COMPILER=default
 CUSTOM_BUILD_DIR=0
 PACKAGE=0
 TEST=0
+USE_CCACHE=1
+WHEEL_CACHE=""
 
 usage() {
   cat <<'HELP'
@@ -22,6 +24,8 @@ Options:
   --clang            Use native clang/clang++ (default build-clang directory)
   --package          Produce Linux .tar.gz package locally
   --test             Run Python 3 native smoke tests after building
+  --wheel-cache PATH Reuse SHA-verified Python 2 wheels at this path
+  --no-ccache        Disable automatic local ccache acceleration
   -h, --help         Show this message
 
 No GitHub Actions or other CI/CD services are used.
@@ -39,6 +43,10 @@ while (($#)); do
         { echo "--jobs requires an integer greater than zero" >&2; exit 2; }
       JOBS="$2"; shift 2 ;;
     --debug) BUILD_TYPE=Debug; shift ;;
+    --wheel-cache)
+      [[ $# -ge 2 ]] || { echo "Missing --wheel-cache value" >&2; exit 2; }
+      WHEEL_CACHE="$2"; shift 2 ;;
+    --no-ccache) USE_CCACHE=0; shift ;;
     --clang) COMPILER=clang; shift ;;
     --package) PACKAGE=1; shift ;;
     --test) TEST=1; shift ;;
@@ -74,6 +82,20 @@ flags=(-S "${ROOT}" -B "${BUILD_DIR}" -G Ninja
        "-DCMAKE_BUILD_TYPE=${BUILD_TYPE}"
        -DENABLE_SSL=OFF -DENABLE_HASHLIB=OFF
        -DUSE_SYSTEM_OpenSSL=OFF)
+if [[ -n "$WHEEL_CACHE" ]]; then
+  if [[ "$WHEEL_CACHE" != /* ]]; then
+    WHEEL_CACHE="${ROOT}/${WHEEL_CACHE}"
+  fi
+  flags+=("-DEVECC_WHEEL_CACHE=${WHEEL_CACHE}")
+fi
+
+if [[ "$USE_CCACHE" -eq 1 ]] && command -v ccache >/dev/null; then
+  flags+=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
+  echo "[INFO] Using local ccache for faster repeat builds"
+elif [[ "$USE_CCACHE" -eq 0 ]]; then
+  flags+=(-DCMAKE_C_COMPILER_LAUNCHER= -DCMAKE_CXX_COMPILER_LAUNCHER=)
+fi
+
 if [[ "$COMPILER" == clang ]]; then
   command -v clang >/dev/null && command -v clang++ >/dev/null ||
     { echo "Install clang and clang++ first" >&2; exit 1; }
