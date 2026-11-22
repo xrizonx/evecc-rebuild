@@ -57,7 +57,14 @@ def unpack(name):
         data = blue.UnjumbleString(encrypted_code, True)
         code = marshal.loads(data)
         print "original filename: " + filename
-        filename = code.co_filename[48:]
+        filename = code.co_filename.replace('\\', '/')
+        for marker in ('/script/', '/carbon/', '/eve/'):
+            if marker in filename:
+                filename = marker.strip('/') + '/' + filename.split(marker, 1)[1]
+                break
+        filename = os.path.normpath(filename).lstrip('/')
+        if filename.startswith('../'):
+            raise ValueError("unsafe compiled code path")
         print filename + " : " + type + " | " + str(hash)
         out_filename = "tmp_out/" + os.path.splitext(filename)[0] + ".py"
         try:
@@ -136,8 +143,14 @@ import binascii
 import struct
 
 def ScriptName(path):
-    s = path.split("\\script")[1].replace('\\', '/')
-    return s
+    normalized = path.replace('\\', '/')
+    if '/script/' in normalized:
+        return normalized.split('/script/', 1)[1]
+    for component in ('eve', 'evedevtools', 'eveservices'):
+        marker = '/' + component + '/'
+        if marker in normalized:
+            return component + '/' + normalized.split(marker, 1)[1]
+    return os.path.basename(normalized)
 
 def CarbonName(path):
     #s = path.split("")[1].replace('\\', '/')
@@ -220,5 +233,6 @@ try:
     Generate(input_paths, output_path)
 except Exception as e:
     print e
+    raise
 
 )ADFAAF";
