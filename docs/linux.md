@@ -40,7 +40,7 @@ for `sudo`.
 ```bash
 sudo apt update
 sudo apt install -y --no-install-recommends \
-  git ca-certificates file build-essential cmake ninja-build pkg-config \
+  git ca-certificates file build-essential cmake ninja-build ccache pkg-config \
   libssl-dev zlib1g-dev libbz2-dev libffi-dev \
   libreadline-dev libsqlite3-dev libncurses-dev \
   libgdbm-dev libgdbm-compat-dev liblzma-dev libexpat1-dev \
@@ -92,7 +92,9 @@ extracted Python source tree and use the `SRC_DIR` and
 
 ## Step 3 — Build EVECC directly on your Linux machine
 
-The easiest option is the repository's local build helper:
+The easiest option is the repository's local build helper. The optional
+`ccache` compiler cache is used automatically if installed; wheel downloads
+are SHA-256 verified and reused from `build/wheel-cache/`:
 
 ```bash
 bash scripts/build-linux.sh --jobs 2
