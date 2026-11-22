@@ -32,7 +32,7 @@ struct keys_blob {
     size_t priv_key_size;
     size_t crypt_blob_size;
     keys_blob();
-    void dump(const char* prefix);
+    bool dump(const char* prefix);
 };
 
 struct CryptContext {
