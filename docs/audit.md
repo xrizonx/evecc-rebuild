@@ -36,7 +36,8 @@ every upstream third-party dependency**.
 | Secret hygiene | Generated private key files could be accidentally committed | `.gitignore` exclusions for keys, artifacts, build output and logs |
 | Documentation | Linux guide had malformed escape sequences and incomplete copy/paste commands | Rewrite step by step, with expected results, troubleshooting and non-CI tests |
 | Python 2 decompiler dependencies | Optional `uncompyle6` was bundled without `xdis`, `spark-parser`, `click` and `six` | SHA-256-pin Python 2 wheels; package their modules and license metadata into one ZIP; extend smoke test to import everything |
-| Decompiler compatibility | No fallback when `uncompyle2` failed to reconstruct bytecode | Retry with bundled `uncompyle6`, propagating both errors instead of silently succeeding |
+| Decompiler compatibility | No fallback when `uncompyle2` failed to reconstruct bytecode | Retry with bundled `uncompyle6`, propagating errors instead of silently succeeding |
+| Legacy encrypted libraries | compilelib mishandled Python refs/paths; compile and extract formats did not round-trip | Reworked portable archive pack/unpack, Python 2.7 pyc headers and argument checks; added local round-trip test (not yet executed) |
 | Container build | No native Linux Docker image or reproducible archive export | Multi-stage Debian 12 Dockerfile, BuildKit incremental/ccache/wheel caches, non-root offline runtime and Compose workflow |
 
 ## Documentation review: end-user workflow
@@ -75,7 +76,10 @@ port finished:
   real historical EVE client.
 - Native Windows build regression tests, particularly key generation,
   crypto operations and CMake packaging.
-- The upstream `compilelib` and `dumplib` modes, originally marked nonfunctional.
+- Experimental `compilelib` and `dumplib` now include native path handling,
+  correct 8-byte Python 2.7 bytecode headers, safe ZIP extraction and a
+  synthetic round-trip test. Original client archive compatibility is still
+  **unverified**.
 - `uncompyle6` dependencies are now bundled from pinned Python 2 wheels,
   but a clean native import/decompiler round-trip still requires local validation.
 - External EVE client/eveloader2 Linux support: **out of scope**, because
