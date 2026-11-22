@@ -101,11 +101,18 @@ set(EVECC_PYTHON_LIB_SOURCE
     "${CMAKE_BINARY_DIR}/vendor/Python-2.7.13/Lib" CACHE PATH
     "Location of the Python 2.7.13 standard-library sources")
 set(EVECC_PYTHON_DIR "${CMAKE_CURRENT_BINARY_DIR}/Python")
-set(EVECC_LIB_STAMP "${EVECC_PYTHON_DIR}/Lib/.evecc-ready")
+# Python's native Linux startup locates the encodings package under
+# <PYTHONHOME>/lib/python2.7 (not Windows' <PYTHONHOME>/Lib).
+if(UNIX AND NOT APPLE)
+    set(EVECC_LIB_DIR "${EVECC_PYTHON_DIR}/lib/python2.7")
+else()
+    set(EVECC_LIB_DIR "${EVECC_PYTHON_DIR}/Lib")
+endif()
+set(EVECC_LIB_STAMP "${EVECC_LIB_DIR}/.evecc-ready")
 add_custom_command(OUTPUT "${EVECC_LIB_STAMP}"
-    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVECC_PYTHON_DIR}/Lib"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVECC_LIB_DIR}"
     COMMAND "${CMAKE_COMMAND}" -E copy_directory
-        "${EVECC_PYTHON_LIB_SOURCE}" "${EVECC_PYTHON_DIR}/Lib"
+        "${EVECC_PYTHON_LIB_SOURCE}" "${EVECC_LIB_DIR}"
     COMMAND "${CMAKE_COMMAND}" -E touch "${EVECC_LIB_STAMP}"
     DEPENDS python
     COMMENT "Bundling native Python 2.7 standard library"
