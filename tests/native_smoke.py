@@ -59,7 +59,7 @@ def main():
         # Exercise the platform-independent binary key extraction command too.
         # This is a synthetic DLL-shaped file, not a real client DLL.
         fake_dll = root / "synthetic-blue.dll"
-        fake_dll.write_bytes(b"\\x00" * 40 + pub + b"\\x7e" * 31 + simple)
+        fake_dll.write_bytes(bytes(40) + pub + bytes([0x7E]) * 31 + simple)
         run([binary, "dumpkeys", "-i", fake_dll], root)
         assert (root / "ccp.keys.pub").read_bytes() == pub
         assert (root / "ccp.keys.crypt").read_bytes() == simple
