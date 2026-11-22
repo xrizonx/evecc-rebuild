@@ -3,7 +3,7 @@
 The executable produced by this procedure is a **Linux ELF binary**, not a
 Windows binary under Wine. It statically embeds the EVE-compatible Python 2.7.13
 runtime, and bundles its Python standard library and decompilers next to the
-executable. Its C++ build uses Linux filesystem APIs and OpenSSL.
+executable. Its C++ build uses Linux filesystem APIs and OpenSSL. The native\nLinux standard library directory is `Python/lib/python2.7/` (Windows uses\n`Python/Lib/`), because the CPython 2.7 startup expects this Linux layout.
 
 ## Install dependencies
 
