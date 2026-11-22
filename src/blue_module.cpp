@@ -4,17 +4,20 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <vector>
+#include <algorithm>
 
 char *_password = NULL;
 
 static PyObject *blue_SignData(PyObject *self, PyObject *args) {
 	char *data = NULL;
-	uint32_t data_size = 0;
+	int data_size = 0;
 	if (!PyArg_ParseTuple(args, "s#", &data, &data_size)) {
 		return NULL;
 	}
-	uint32_t signature_size = 0;
-	char *signature = SignData(data, data_size, &signature_size, _password);
+	if (data_size < 0) { PyErr_SetString(PyExc_ValueError, "invalid signed data"); return NULL; }
+    uint32_t signature_size = 0;
+	char *signature = SignData(data, static_cast<uint32_t>(data_size), &signature_size, _password);
 
 	if (signature == NULL) {
 		PyErr_SetString(PyExc_RuntimeError, "SignData failed");
@@ -29,14 +32,15 @@ static PyObject *blue_SignData(PyObject *self, PyObject *args) {
 
 static PyObject *blue_JumbleString(PyObject *self, PyObject *args) {
 	char *code = NULL;
-	uint32_t code_size = 0;
+	int code_size = 0;
 	int zip = true;
 	if (!PyArg_ParseTuple(args, "s#|i", &code, &code_size, &zip)) {
 		return NULL;
 	}
 
 	uint32_t r = 0;
-	char *output = JumbleString(code, code_size, &r, ctx->set_key_type, zip);
+	if (code_size < 0 || !ctx) { PyErr_SetString(PyExc_ValueError, "invalid source data"); return NULL; }
+    char *output = JumbleString(code, static_cast<uint32_t>(code_size), &r, ctx->set_key_type, zip);
 	if (r <= 0 || output == NULL) {
 		PyErr_SetString(PyExc_RuntimeError, "JumbleString failed");
         return NULL;
@@ -48,44 +52,48 @@ static PyObject *blue_JumbleString(PyObject *self, PyObject *args) {
 }
 
 static PyObject *blue_UnjumbleString(PyObject *self, PyObject *args) {
-	char *code = NULL;
-	uint32_t code_size = 0;
-	int zip = true;
-
-	if (!PyArg_ParseTuple(args, "s#|i", &code, &code_size, &zip)) {
-		return NULL;
-	}
-
-	if (code_size > std::numeric_limits<uint32_t>::max() / 10) {
-        PyErr_SetString(PyExc_OverflowError, "input too large to decompress");
+    char *code = NULL;
+    int code_size = 0;
+    int zip = true;
+    if (!PyArg_ParseTuple(args, "s#|i", &code, &code_size, &zip))
         return NULL;
-    }
-    const uint32_t capacity = code_size * 10;
-    char *output = (char *)calloc(1, capacity ? capacity : 1);
-    if (output == NULL) return PyErr_NoMemory();
-
-	int r = UnjumbleString(code, code_size, output, capacity, ctx->set_key_type, zip);
-	if (r <= 0 || static_cast<uint32_t>(r) > capacity) {
-        free(output);
-        PyErr_SetString(PyExc_RuntimeError, "UnjumbleString failed or output buffer too small");
+    if (code_size <= 0 || !ctx) {
+        PyErr_SetString(PyExc_ValueError, "encrypted input missing");
         return NULL;
     }
 
-	PyObject *o = PyString_FromStringAndSize(output, r);
-	free(output);
-	return o;
+    // A highly compressed marshal stream can expand far beyond 10x.
+    // Grow only up to a fixed ceiling to guard against decompression bombs.
+    static const size_t limit = 128u * 1024u * 1024u;
+    const size_t first = std::min(limit, std::max<size_t>(
+        4096, static_cast<size_t>(code_size) * 2));
+    for (size_t capacity = first; capacity <= limit;) {
+        std::vector<char> output(capacity);
+        uint32_t decoded = UnjumbleString(
+            code, static_cast<uint32_t>(code_size), output.data(),
+            static_cast<uint32_t>(output.size()), ctx->set_key_type, zip != 0);
+        if (decoded && decoded <= capacity)
+            return PyString_FromStringAndSize(output.data(), decoded);
+        if (capacity == limit) break;
+        capacity = std::min(limit, capacity * 2);
+    }
+
+    PyErr_SetString(PyExc_RuntimeError,
+                    "failed to decrypt/decompress or 128 MiB output limit exceeded");
+    return NULL;
 }
 
 static PyObject *blue_SetBuildCache(PyObject *self, PyObject *args) {
     char *code_path = NULL;
     char *code_data = NULL;
-    uint32_t code_data_size = 0;
+    int code_data_size = 0;
     if (!PyArg_ParseTuple(args, "s|s#", &code_path, &code_data, &code_data_size)) {
         PyErr_SetString(PyExc_TypeError, "expected (string, buffer)");
         return NULL;
     }
 
-    install_cache(std::string(code_path), code_data, code_data_size);
+    if (code_data && code_data_size >= 0)
+        install_cache(std::string(code_path), code_data, code_data_size);
     Py_IncRef(Py_None);
     return Py_None;
 }
@@ -110,11 +118,11 @@ static PyObject *blue_GetBuildCache(PyObject *self, PyObject *args) {
 }
 
 static PyMethodDef BlueMethods[] = {
-	{"JumbleString", blue_JumbleString, METH_VARARGS, "fuckin"},
-	{"UnjumbleString", blue_UnjumbleString, METH_VARARGS, "fuckin"},
-	{"SignData", blue_SignData, METH_VARARGS, "fuckin"},
-    {"SetBuildCache", blue_SetBuildCache, METH_VARARGS, "fuckin"},
-    {"GetBuildCache", blue_GetBuildCache, METH_VARARGS, "fuckin"},
+	{"JumbleString", blue_JumbleString, METH_VARARGS, "EVECC legacy client cryptography or cache operation"},
+	{"UnjumbleString", blue_UnjumbleString, METH_VARARGS, "EVECC legacy client cryptography or cache operation"},
+	{"SignData", blue_SignData, METH_VARARGS, "EVECC legacy client cryptography or cache operation"},
+    {"SetBuildCache", blue_SetBuildCache, METH_VARARGS, "EVECC legacy client cryptography or cache operation"},
+    {"GetBuildCache", blue_GetBuildCache, METH_VARARGS, "EVECC legacy client cryptography or cache operation"},
 	{NULL, NULL, 0, NULL},
 };
 
