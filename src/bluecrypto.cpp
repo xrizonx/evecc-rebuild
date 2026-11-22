@@ -563,41 +563,35 @@ bool make_code_accessors(char *password) {
     LOG_F(INFO,"exporting private key..");
     keys->priv_key = smart_export_key(sig, PRIVATEKEYBLOB, &keys->priv_key_size, pkey);
 
-    keys->dump(EVECC_ROAMING_KEYS);
-    return true;
+    return keys->dump(EVECC_ROAMING_KEYS);
 }
 
 keys_blob::keys_blob() {
     memset(this, 0, sizeof(*this));
 }
 
-void keys_blob::dump(const char *prefix) {
-    LOG_F(INFO,"dumping keys with prefix: %s", prefix);
-    std::string base = std::string(prefix);
-    std::string pub_filename = base + "pub";
-    std::string priv_filename = base + "priv";
-    std::string crypt_filename = base + "crypt";
-    if (pub_key != NULL) {
-        LOG_F(INFO,"dumping public key: %s", pub_filename.c_str());
-        FILE *f = fopen(pub_filename.c_str(), "wb");
-        fwrite(pub_key, pub_key_size, 1, f);
-        fflush(f);
-        fclose(f);
-    }
-    if (this->priv_key != NULL) {
-        LOG_F(INFO,"dumping private key: %s", priv_filename.c_str());
-        FILE *f = fopen(priv_filename.c_str(), "wb");
-        fwrite(this->priv_key, this->priv_key_size, 1, f);
-        fflush(f);
-        fclose(f);
-    }
-    if (this->crypt_blob != NULL) {
-        LOG_F(INFO,"dumping crypt key: %s", crypt_filename.c_str());
-        FILE *f = fopen(crypt_filename.c_str(), "wb");
-        fwrite(this->crypt_blob, this->crypt_blob_size, 1, f);
-        fflush(f);
-        fclose(f);
-    }
+bool keys_blob::dump(const char* prefix) {
+    const std::string base = prefix ? prefix : "";
+    auto save = [&](const char* suffix, const char* value, size_t size) {
+        if (!value) return true;
+        const std::string path = base + suffix;
+        FILE* file = fopen(path.c_str(), "wb");
+        if (!file) {
+            LOG_F(ERROR, "Unable to open key output: %s", path.c_str());
+            return false;
+        }
+        const size_t wrote = fwrite(value, 1, size, file);
+        const int closed = fclose(file);
+        if (wrote != size || closed != 0) {
+            LOG_F(ERROR, "Failed writing key file: %s", path.c_str());
+            return false;
+        }
+        return true;
+    };
+    bool ok = save("pub", pub_key, pub_key_size);
+    ok = save("priv", priv_key, priv_key_size) && ok;
+    ok = save("crypt", crypt_blob, crypt_blob_size) && ok;
+    return ok;
 }
 
 CryptKeyType parse_key_type(char *type) {
