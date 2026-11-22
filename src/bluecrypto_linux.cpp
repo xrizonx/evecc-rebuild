@@ -98,7 +98,7 @@ bool write_file(const std::string& filename, const char* data, size_t len, bool 
 // CryptoAPI CryptDeriveKey(CALG_RC4, SHA1(password)) with 128-bit RC4
 // (MS Enhanced provider) encrypts PRIVATEKEYBLOB secret material.
 void rc4_password(unsigned char* data, size_t size, const char* password) {
-    if (!password) return;
+    if (!password || !*password) return;
     unsigned char digest[SHA_DIGEST_LENGTH];
     SHA1(reinterpret_cast<const unsigned char*>(password),
          std::strlen(password), digest);
@@ -118,6 +118,7 @@ void rc4_password(unsigned char* data, size_t size, const char* password) {
         data[n] ^= state[(state[i] + state[j]) & 255U];
     }
     OPENSSL_cleanse(digest, sizeof(digest));
+    OPENSSL_cleanse(state.data(), state.size());
 }
 
 RsaHandle load_private_key(const char* buffer, size_t length, const char* password) {
@@ -125,12 +126,19 @@ RsaHandle load_private_key(const char* buffer, size_t length, const char* passwo
     if (!rsa || !buffer || length != RSA_PRIVATE_BLOB) return {nullptr, RSA_free};
     std::vector<unsigned char> raw(buffer, buffer + length);
     const auto* p = raw.data();
-    if (p[0] != 0x07 || p[1] != 0x02 ||
-        read_u32(p + 8) != 0x32415352 || read_u32(p + 12) != 1024)
+    if (p[0] != 0x07 || p[1] != 0x02 || read_u32(p + 4) != CALG_RSA_SIGN)
         return {nullptr, RSA_free};
-    // BLOBHEADER and RSAPUBKEY are in clear text; key components are wrapped.
-    rc4_password(raw.data() + 20, raw.size() - 20, password);
+    // Microsoft CryptoAPI encrypts EVERYTHING after PUBLICKEYSTRUC (8 bytes),
+    // including RSAPUBKEY, the modulus and the private key components.
+    // Never inspect RSA2/bitlen until after decrypting that segment.
+    if (password && password[0]) {
+        rc4_password(raw.data() + 8, raw.size() - 8, password);
+    }
     p = raw.data();
+    if (read_u32(p + 8) != 0x32415352 || read_u32(p + 12) != 1024) {
+        OPENSSL_cleanse(raw.data(), raw.size());
+        return {nullptr, RSA_free};
+    }
     size_t pos = 20;
     auto take = [&](size_t count) {
         BIGNUM* bn = read_le(p + pos, count);
@@ -187,7 +195,9 @@ std::vector<unsigned char> export_private_key(RSA* rsa, const char* password) {
         append(dmp1, RSA_BYTES / 2) && append(dmq1, RSA_BYTES / 2) &&
         append(iqmp, RSA_BYTES / 2) && append(d, RSA_BYTES);
     if (!ok) return {};
-    rc4_password(result.data() + 20, result.size() - 20, password);
+    // PRIVATEKEYBLOB wraps bytes starting at offset 8 (not 20).
+    if (password && password[0])
+        rc4_password(result.data() + 8, result.size() - 8, password);
     return result;
 }
 
