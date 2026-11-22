@@ -210,7 +210,10 @@ For additional rationale, caveats and details, see
 ## Windows (legacy tooling)
 
 The historical Windows build requires Visual Studio 2022 C++ Build Tools,
-the Windows 10/11 SDK, CMake and Ninja. Its previous instructions used
+the Windows 10/11 SDK, CMake, Ninja, and a **native Windows zlib** development
+library that CMake can discover (for example, zlib from vcpkg for your MSVC
+architecture). If CMake cannot find zlib, configure its toolchain or supply
+`-DZLIB_ROOT=<path-to-native-zlib>`. Its previous instructions used
 `C:\Program Files\7-Zip\7z.exe` and `python27.lib`; the cross-platform CMake
 work replaces the hard-coded Windows packaging path with CPack.
 
