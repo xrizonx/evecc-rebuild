@@ -48,7 +48,14 @@ def main():
         pub = (root / "evecc.keys.pub").read_bytes()
         priv = (root / "evecc.keys.priv").read_bytes()
         assert len(pub) == 148 and pub[:2] == b"\x06\x02"
-        assert len(priv) == 596 and priv[:2] == b"\x07\x02"
+        assert len(priv) == 596 and priv[:2] == b"\\x07\\x02"
+        # Safety regression: never overwrite an existing signing key pair.
+        attempt = subprocess.run(
+            [str(binary), "genkeys", "--password", password],
+            cwd=root, capture_output=True, text=True)
+        assert attempt.returncode != 0
+        assert (root / "evecc.keys.pub").read_bytes() == pub
+        assert (root / "evecc.keys.priv").read_bytes() == priv
 
         # A CryptoAPI SIMPLEBLOB from an exponent-of-one wrapping key stores
         # the PKCS#1 v1.5 type-2 padded secret in reverse (little-endian) order.
@@ -62,6 +69,10 @@ def main():
         fake_dll.write_bytes(bytes(40) + pub + bytes([0x7E]) * 31 + simple)
         run([binary, "dumpkeys", "-i", fake_dll], root)
         assert (root / "ccp.keys.pub").read_bytes() == pub
+        assert (root / "ccp.keys.crypt").read_bytes() == simple
+        again = subprocess.run([str(binary), "dumpkeys", "-i", str(fake_dll)],
+                               cwd=root, capture_output=True, text=True)
+        assert again.returncode != 0
         assert (root / "ccp.keys.crypt").read_bytes() == simple
 
         python_root = root / "script"
