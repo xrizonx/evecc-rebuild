@@ -36,9 +36,10 @@ struct cmd_args {
     bool do_runscript;
     bool do_console;
     bool do_dumpkeys;
-    cmd_args() {
-        memset(this, 0, sizeof(*this));
-    }
+    cmd_args() : password(nullptr), input_file(nullptr), output_file(nullptr), key_type(nullptr),
+        do_cleancache(false), do_nocache(false), do_genkeys(false), do_dumpcode(false),
+        do_dumplib(false), do_compilecode(false), do_unpyj(false), do_compilelib(false),
+        do_help(false), do_runscript(false), do_console(false), do_dumpkeys(false) {}
 };
 
 int cmd_dumpcode(cmd_args *args);
