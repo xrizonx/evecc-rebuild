@@ -91,6 +91,9 @@ marshal files are incompatible with this historical EVE client.
   `console` are available as commands. `compilelib` and `dumplib` were
   already marked non-functional in the original project and have not been
   declared fixed by this port.
+- The included `uncompyle6` source archive is not currently self-contained:
+  `xdis` and `spark-parser` are required if using that optional decompiler.
+  The default EVECC decompile scripts use `uncompyle2`.
 - The external Windows-only **eveloader2** and the EVE game client are
   **not in this repository**. This work does not turn those programs into
   Linux executables; they require separate source and porting.
