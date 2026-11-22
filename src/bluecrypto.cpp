@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <vector>
+#include <limits>
 
 
 #include "zlib.h"
@@ -118,7 +120,7 @@ BOOL CreatePrivateExponentOneKey(LPTSTR szProvider,
 HCRYPTKEY CryptContext::GetKey(CryptKeyType type) {
 	switch (type) {
 	case CRYPTKEY_CCP:
-		return this->ccp_key;
+        return this->ccp_key ? this->ccp_key : this->ccp_crypt_key;
 		break;
     case CRYPTKEY_ROAMING:
         return this->ccp_crypt_key;
@@ -194,7 +196,7 @@ bool import_keys(char *password) {
         LOG_F(INFO, "successfully loaded CCP crypt key blob");
     } else {
         LOG_F(ERROR, "you must first dump CCP's keys with --dump-keys <path to blue.dll>");
-        exit(-12);
+        return false;
     }
     if(HasFile(EVECC_ROAMING_KEYS"pub") && HasFile(EVECC_ROAMING_KEYS"priv")) {
         LOG_F(INFO," roaming keys %s found, loading this as well!", EVECC_ROAMING_KEYS);
@@ -217,7 +219,7 @@ bool import_keys(char *password) {
         LOG_F(INFO, "successfully loaded roaming private key blob");
     } else {
         LOG_F(ERROR, "you must first generate an RSA key pair with --gen-key");
-        exit(-11);
+        return false;
     }
 
     return true;
@@ -283,61 +285,39 @@ char *memdup(const char *input, uint32_t size) {
     return o;
 }
 
-char *JumbleString(const char *input, uint32_t input_size, uint32_t *read_bytes, CryptKeyType key_type, bool zip) {
-
-	uint32_t total_out = compressBound(input_size);
-	char *tmp_out = (char *)calloc(1, total_out);
-	if (zip) {
-		z_stream info = { 0 };
-
-		info.zalloc = Z_NULL;
-		info.zfree = Z_NULL;
-		info.opaque = Z_NULL;
-		info.avail_in = input_size;
-		info.next_in = (Bytef *)input;
-		info.avail_out = total_out;
-		info.next_out = (Bytef *)tmp_out;
-
-		int err;
-
-
-		err = deflateInit(&info, 6);
-		if (err == Z_OK) {
-			err = deflate(&info, Z_FINISH);
-			if (err == Z_OK ||
-				err == Z_STREAM_END) {
-				total_out = info.total_out;
-			} else {
-				*read_bytes = err;
-				return NULL;
-			}
-		}
-		//inflateEnd(&info);
-	}
-
-	uint32_t encrypted_size = total_out;
+char* JumbleString(const char* input, uint32_t input_size, uint32_t* out_size,
+                   CryptKeyType key_type, bool zip) {
+    if (out_size) *out_size = 0;
+    if (!out_size || !ctx || (!input && input_size)) return NULL;
     HCRYPTKEY key = ctx->GetKey(key_type);
-	if (!CryptEncrypt(key, 0, true, 0, NULL, (DWORD *)&total_out, total_out)) {
-        std::string err = get_last_error_string();
-		LOG_F(ERROR,"failed to decrypt: %s", err.c_str());
-		*read_bytes = -1;
-		return NULL;
-	}
+    if (!key) { LOG_F(ERROR, "Encryption key is unavailable"); return NULL; }
 
-	char *real_out = (char *)calloc(1, total_out);
-	memcpy(real_out, tmp_out, encrypted_size);
-	free(tmp_out);
-
-	uint32_t total_in = encrypted_size;
-
-	if (!CryptEncrypt(ctx->GetKey(key_type), 0, true, 0, (BYTE *)real_out, (DWORD *)&total_in, total_out)) {
-        std::string err = get_last_error_string();
-		LOG_F(ERROR,"failed to decrypt: %s", err.c_str());
-		*read_bytes = -1;
-		return NULL;
-	}
-	*read_bytes = total_in;
-	return real_out;
+    std::vector<BYTE> source;
+    if (zip) {
+        uLongf compressed_size = compressBound(input_size);
+        source.resize(compressed_size);
+        const int status = compress2(source.data(), &compressed_size,
+            reinterpret_cast<const Bytef*>(input), input_size, 6);
+        if (status != Z_OK) return NULL;
+        source.resize(static_cast<size_t>(compressed_size));
+    } else {
+        const BYTE* src = reinterpret_cast<const BYTE*>(input);
+        if (input_size) source.assign(src, src + input_size);
+    }
+    if (source.size() > std::numeric_limits<DWORD>::max()) return NULL;
+    DWORD encrypted_size = static_cast<DWORD>(source.size());
+    if (!CryptEncrypt(key, 0, TRUE, 0, NULL, &encrypted_size, encrypted_size))
+        return NULL;
+    std::vector<BYTE> output(encrypted_size);
+    if (!source.empty()) memcpy(output.data(), source.data(), source.size());
+    DWORD actual_size = static_cast<DWORD>(source.size());
+    if (!CryptEncrypt(key, 0, TRUE, 0, output.data(), &actual_size, encrypted_size))
+        return NULL;
+    char* result = reinterpret_cast<char*>(malloc(actual_size ? actual_size : 1));
+    if (!result) return NULL;
+    memcpy(result, output.data(), actual_size);
+    *out_size = actual_size;
+    return result;
 }
 
 #include <strsafe.h>
@@ -372,55 +352,39 @@ void ErrorExit(LPTSTR lpszFunction) {
 	ExitProcess(dw);
 }
 
-uint32_t
-UnjumbleString(const char *input, uint32_t input_size, char *output, uint32_t output_size, CryptKeyType key_type,
-               bool zip) {
+uint32_t UnjumbleString(const char* input, uint32_t input_size,
+                        char* output, uint32_t output_size,
+                        CryptKeyType key_type, bool zip) {
+    if (!ctx || !input || !input_size || !output || !output_size) return 0;
+    HCRYPTKEY key = ctx->GetKey(key_type);
+    if (!key) return 0;
 
-	char *real_input = (char *)calloc(1, input_size);
-	memcpy(real_input, input, input_size);
+    // CryptDecrypt is in-place, so preserve the caller's encrypted input.
+    std::vector<BYTE> data(input, input + input_size);
+    DWORD decrypted_size = input_size;
+    if (!CryptDecrypt(key, 0, TRUE, 0, data.data(), &decrypted_size)) {
+        LOG_F(ERROR, "CryptoAPI 3DES decryption failed: %s",
+              get_last_error_string().c_str());
+        return 0;
+    }
 
-	uint32_t decrypted_size = input_size;
+    if (!zip) {
+        if (decrypted_size > output_size) return 0;
+        memcpy(output, data.data(), decrypted_size);
+        return decrypted_size;
+    }
 
-	uint32_t val =
-		CryptDecrypt(ctx->GetKey(key_type), 0, true, 0,
-			     (BYTE *)real_input, (DWORD *)&decrypted_size);
-
-	if (!val) {
-        std::string err = get_last_error_string();
-		LOG_F(ERROR,"failed to decrypt: %s", err.c_str());
-		return -8;
-	}
-
-
-	if (zip) {
-		z_stream info = { 0 };
-		info.total_in = decrypted_size;
-		info.avail_in = decrypted_size;
-		info.total_out = output_size;
-		info.avail_out = output_size;
-
-		info.next_in = (Bytef *)real_input;
-		info.next_out = (Bytef *)output;
-
-		int err;
-		int ret;
-
-		err = inflateInit(&info);
-		if (err == Z_OK) {
-			err = inflate(&info, Z_FINISH);
-			if (err == Z_OK ||
-				err == Z_STREAM_END) {
-				ret = info.total_out;
-			} else {
-				return err;
-			}
-		}
-		inflateEnd(&info);
-		free(real_input);
-		return info.total_out;
-	}
-	free(real_input);
-	return -100;
+    z_stream stream = {};
+    stream.next_in = data.data();
+    stream.avail_in = decrypted_size;
+    stream.next_out = reinterpret_cast<Bytef*>(output);
+    stream.avail_out = output_size;
+    if (inflateInit(&stream) != Z_OK) return 0;
+    const int rc = inflate(&stream, Z_FINISH);
+    const uint32_t decoded = rc == Z_STREAM_END && stream.total_out <= output_size ?
+        static_cast<uint32_t>(stream.total_out) : 0;
+    inflateEnd(&stream);
+    return decoded;
 }
 
 HCRYPTKEY generate_key_from_password(char *password, HCRYPTPROV context) {
