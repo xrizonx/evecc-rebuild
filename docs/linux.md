@@ -27,7 +27,7 @@ cd evecc-rebuild
 # against modern OpenSSL 3. The EVECC encryption backend still links
 # to native OpenSSL and is unaffected.
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -DENABLE__SSL=OFF -DENABLE__HASHLIB=OFF -DUSE_SYSTEM_OpenSSL=OFF
+  -DENABLE_SSL=OFF -DENABLE_HASHLIB=OFF -DUSE_SYSTEM_OpenSSL=OFF
 cmake --build build --parallel 2
 
 # Run from any directory; the runtime is located beside the executable.
