@@ -17,7 +17,6 @@ file(MAKE_DIRECTORY "${EVECC_WHEEL_CACHE}" "${EVECC_OUTPUT_DIR}")
 file(REMOVE_RECURSE "${stage}")
 file(MAKE_DIRECTORY "${stage}")
 
-set(packages xdis spark_parser click)
 foreach(spec IN LISTS EVECC_WHEELS)
     string(REPLACE "|" ";" fields "${spec}")
     list(LENGTH fields field_count)
@@ -88,4 +87,20 @@ endforeach()
 
 # Include wheel dist-info directories so all installed package metadata and
 # third-party licenses remain with the self-contained decompiler.
-file(GLOB metadata_dirs RELATIVE "${stage}" "${stage}
+file(GLOB metadata_dirs RELATIVE "${stage}" "${stage}/*.dist-info")
+set(archive_entries uncompyle6 xdis spark_parser click six.py LICENSES)
+list(APPEND archive_entries ${metadata_dirs})
+set(bundle "${EVECC_OUTPUT_DIR}/uncompyle6.zip")
+file(REMOVE "${bundle}")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E tar cf "${bundle}" --format=zip
+            ${archive_entries}
+    WORKING_DIRECTORY "${stage}"
+    RESULT_VARIABLE pack_rc
+    ERROR_VARIABLE pack_errors)
+if(NOT pack_rc EQUAL 0 OR NOT EXISTS "${bundle}")
+    message(FATAL_ERROR "Failed bundling uncompyle6 dependencies: ${pack_errors}")
+endif()
+file(SIZE "${bundle}" bundle_size)
+message(STATUS "Built self-contained uncompyle6.zip (${bundle_size} bytes)")
+file(REMOVE_RECURSE "${stage}")
