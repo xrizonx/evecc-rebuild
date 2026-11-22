@@ -152,7 +152,7 @@ build/
         os.py
         ...
     uncompyle2.zip
-    uncompyle6.zip
+    uncompyle6.zip   # Includes xdis, spark_parser, click and six
 ```
 
 Linux uses `Python/lib/python2.7/`, unlike Windows' `Python/Lib/`.
@@ -264,6 +264,7 @@ computer. Use `ldd evecc` there to find any missing dependencies.
 | `_cursesmodule.c` errors | The old ncurses extension should be disabled; confirm you pulled latest CMake files |
 | `_ssl`/`_hashlib` errors | Use the CMake options from Step 3 |
 | `LookupError: no codec search functions registered` | Verify `build/Python/lib/python2.7/encodings/` exists; refresh build after pulling latest |
+| `Cannot download xdis/spark-parser/click/six` | Restore network access or supply checksum-matching wheels in `build/wheel-cache/` |
 | `Unable to find key blob` | Use a matching, unmodified `blue.dll`; inspect file/size/version |
 | `Keys already exist` | Back up the existing key pair and carefully remove old files before regenerating |
 | `failed to decrypt/decompress` | Confirm the key matches this client, password is correct and input data is valid |
@@ -278,10 +279,14 @@ computer. Use `ldd evecc` there to find any missing dependencies.
   replacing it with Python 3 would change the bytecode format.
 - The C++ application uses native Linux APIs. `blue.dll` is scanned as a file,
   never executed through Wine.
-- The optional `uncompyle6` archive is not fully standalone without its
-  Python dependencies `xdis` and `spark-parser`. EVECC's default decompiler
-  scripts use `uncompyle2`.
+- The optional `uncompyle6` archive now includes `xdis`, `spark_parser`,
+  `click`, and `six` from checksum-pinned Python 2 wheels. The default
+  decompiler tries `uncompyle2` first and falls back to `uncompyle6`.
+  This dependency integration requires a successful local smoke test before
+  being considered verified.
 - `compilelib` and `dumplib` were already considered non-functional upstream.
+- The repository now has a multi-stage native Linux Dockerfile and an
+  optional Compose workflow. See [Docker instructions](docker.md).
 - The separate game client and external Windows-only `eveloader2` are not
   contained in this repository and have not been ported here.
 - RSA/SHA-1, RC4 and 3DES are obsolete and retained **only** for legacy
