@@ -27,7 +27,7 @@ Windows `python27.lib` is needed to compile the Linux version.
 ```bash
 sudo apt update
 sudo apt install -y --no-install-recommends \
-  git ca-certificates build-essential cmake ninja-build pkg-config \
+  git ca-certificates file build-essential cmake ninja-build pkg-config \
   libssl-dev zlib1g-dev libbz2-dev libffi-dev \
   libreadline-dev libsqlite3-dev libncurses-dev \
   libgdbm-dev libgdbm-compat-dev liblzma-dev libexpat1-dev \
@@ -55,6 +55,20 @@ The required submodules include `python-cmake-buildsystem`, `crc32c`, `loguru`,
 downloads Python 2.7.13 source from python.org (unless already provided locally).
 
 ### 3. Configure and compile a native Linux binary
+
+For the simplest **manual local build** (without GitHub Actions), run:
+
+```bash
+bash scripts/build-linux.sh --jobs 2
+# Optional local packaging:
+bash scripts/build-linux.sh --jobs 2 --package
+# Optional local tests (requires python3 and openssl CLI):
+bash scripts/build-linux.sh --jobs 2 --test
+```
+
+The script validates the essential tools, configures native dependencies and
+builds on your own machine. For direct CMake control, use the equivalent steps
+below.
 
 ```bash
 cmake -S . -B build -G Ninja \
@@ -213,6 +227,7 @@ re-validated; use the last known-good Windows release if you need it immediately
 | `compilelib` / `dumplib` | Still unverified/nonfunctional upstream |
 | External `eveloader2` and EVE client | Out of scope for this repository |
 | GitHub Actions CI/CD | Disabled; manual local builds only |
+| `scripts/build-linux.sh` helper | Implemented; no hosted build service required |
 
 **Important:** EVECC preserves historical Python 2.7, SHA-1 and 3DES for
 format compatibility. Do not expose it as a network service or reuse these
