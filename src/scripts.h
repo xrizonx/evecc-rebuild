@@ -57,7 +57,7 @@ def safe_code_path(filename):
             break
     relative = os.path.normpath(filename).lstrip('/')
     if (not relative or relative == '.' or relative == '..' or
-        relative.startswith('../') or '\\x00' in relative):
+        relative.startswith('../') or chr(0) in relative):
         raise ValueError("Unsafe embedded code filename: " + repr(filename))
     if ':' in relative.split('/')[0]:
         raise ValueError("Unexpected drive prefix in code filename: " + repr(filename))
