@@ -4,6 +4,9 @@
 
 #include <iostream>
 #include <algorithm>
+#include <filesystem>
+#include <memory>
+#include <limits>
 #include "version.h"
 #include "commands.h"
 #include "util.h"
@@ -29,102 +32,91 @@
 
 using namespace std::chrono;
 
-int cmd_dumpcode(cmd_args *args) {
-    high_resolution_clock::time_point t1 = high_resolution_clock::now();
-    PyGILState_STATE s = PyGILState_Ensure();
-    PyObject *main = PyImport_AddModule("__main__");
-    if (args->input_file == NULL || args->output_file == NULL) {
-        LOG_F(ERROR, "you must set -i <input file> and -o <output directory> for dumpcode");
-        return -1;
-    }
-
-    PyObject *o = PyString_FromString(args->output_file);
-    PyObject_SetAttrString(main, "output_path", o);
-
-    PyObject *i = PyString_FromString(args->input_file);
-    PyObject_SetAttrString(main, "input_path", i);
-
-    int r = PyRun_SimpleString(uncompile_code_script);
-
-    PyGILState_Release(s);
-
-    high_resolution_clock::time_point t2 = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(t2 - t1).count();
-    std::cout << "Dumped codefile in " << duration << "us\n";
-    fflush(stdout);
-
-    return 0;
+static int set_python_string(PyObject* main, const char* name, const char* value) {
+    PyObject* data = PyString_FromString(value);
+    if (!data) return -1;
+    const int result = PyObject_SetAttrString(main, name, data);
+    Py_DECREF(data);
+    return result;
 }
 
-
-int cmd_dumplib(cmd_args *args) {
-    high_resolution_clock::time_point t1 = high_resolution_clock::now();
-    PyGILState_STATE s = PyGILState_Ensure();
-    PyObject *main = PyImport_AddModule("__main__");
-    if (args->input_file == NULL || args->output_file == NULL) {
-        LOG_F(ERROR, "you must set -i <input file> and -o <output directory> for dumplib");
-        return -1;
+int cmd_dumpcode(cmd_args* args) {
+    if (!args || !args->input_file || !args->output_file) {
+        LOG_F(ERROR, "dumpcode requires -i <compiled.code> and -o <directory>");
+        return 2;
     }
-
-    PyObject *o = PyString_FromString(args->output_file);
-    PyObject_SetAttrString(main, "output_path", o);
-
-    PyObject *i = PyString_FromString(args->input_file);
-    PyObject_SetAttrString(main, "input_path", i);
-
-    int r = PyRun_SimpleString(uncompile_lib_script);
-
-    PyGILState_Release(s);
-
-    high_resolution_clock::time_point t2 = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(t2 - t1).count();
-    std::cout << "Dumped codefile in " << duration << "us\n";
-    fflush(stdout);
-
-    return 0;
+    const auto started = high_resolution_clock::now();
+    PyGILState_STATE gil = PyGILState_Ensure();
+    PyObject* main = PyImport_AddModule("__main__");
+    const int result = main &&
+        set_python_string(main, "output_path", args->output_file) == 0 &&
+        set_python_string(main, "input_path", args->input_file) == 0 ?
+        PyRun_SimpleString(uncompile_code_script) : -1;
+    if (result != 0 && PyErr_Occurred()) PyErr_Print();
+    PyGILState_Release(gil);
+    const auto ms = duration_cast<milliseconds>(
+        high_resolution_clock::now() - started).count();
+    LOG_F(INFO, "dumpcode %s (%lld ms)", result == 0 ? "completed" : "failed",
+          static_cast<long long>(ms));
+    return result == 0 ? 0 : 3;
 }
 
-int cmd_compilecode(cmd_args *args) {
-	high_resolution_clock::time_point t1 = high_resolution_clock::now();
-	PyGILState_STATE s = PyGILState_Ensure();
-	PyObject *main = PyImport_AddModule("__main__");
+int cmd_dumplib(cmd_args* args) {
+    if (!args || !args->input_file || !args->output_file) {
+        LOG_F(ERROR, "dumplib requires -i <library.ccp> and -o <directory>");
+        return 2;
+    }
+    PyGILState_STATE gil = PyGILState_Ensure();
+    PyObject* main = PyImport_AddModule("__main__");
+    const int result = main &&
+        set_python_string(main, "output_path", args->output_file) == 0 &&
+        set_python_string(main, "input_path", args->input_file) == 0 ?
+        PyRun_SimpleString(uncompile_lib_script) : -1;
+    if (result != 0 && PyErr_Occurred()) PyErr_Print();
+    PyGILState_Release(gil);
+    return result == 0 ? 0 : 3;
+}
 
-	if (args->input_files.size() > 0) {
-		//PyObject *p = PyString_FromString(input_file);
-		//PyObject_SetAttrString(main, "input_path", p);
-		//Py_DECREF(p);
-		PyObject *p = PyList_New(args->input_files.size());
-		for (uint32_t i = 0; i < args->input_files.size(); i++) {
-			PyObject *str =
-				PyString_FromString(args->input_files[i].c_str());
-			//PyList_Append(p, str);
-			PyList_SetItem(p, i, str);
-			//Py_DECREF(str);
-		}
-		PyObject_SetAttrString(main, "input_paths", p);
-		//Py_DECREF(p);
-	} else {
-		LOG_F(ERROR,"No input paths set. (Use -I flag)");
-		return 3;
-	}
-
-	if (args->output_file != NULL) {
-		PyObject *o = PyString_FromString(args->output_file);
-		PyObject_SetAttrString(main, "output_path", o);
-		//Py_DECREF(o);
-	}
-
-	//Py_DECREF(main);
-
-	int r = PyRun_SimpleString(compile_code_script);
-
-	PyGILState_Release(s);
-
-	high_resolution_clock::time_point t2 = high_resolution_clock::now();
-	auto duration = duration_cast<microseconds>(t2 - t1).count();
-	std::cout << "Compiled codefile in " << duration << "us\n";
-	fflush(stdout);
-	return r;
+int cmd_compilecode(cmd_args* args) {
+    if (!args || args->input_files.empty() || !args->output_file) {
+        LOG_F(ERROR, "compilecode requires -o <compiled.code> and one or more -I <source_dir>");
+        return 2;
+    }
+    for (const auto& path : args->input_files) {
+        if (!std::filesystem::is_directory(path)) {
+            LOG_F(ERROR, "Invalid source directory: %s", path.c_str());
+            return 2;
+        }
+    }
+    const auto started = high_resolution_clock::now();
+    PyGILState_STATE gil = PyGILState_Ensure();
+    PyObject* main = PyImport_AddModule("__main__");
+    int result = -1;
+    if (main && set_python_string(main, "output_path", args->output_file) == 0) {
+        PyObject* paths = PyList_New(static_cast<Py_ssize_t>(args->input_files.size()));
+        if (paths) {
+            bool ok = true;
+            for (size_t i = 0; i < args->input_files.size(); ++i) {
+                PyObject* value = PyString_FromString(args->input_files[i].c_str());
+                if (!value) { ok = false; break; }
+                // SetItem steals the single reference.
+                if (PyList_SetItem(paths, static_cast<Py_ssize_t>(i), value) != 0) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok && PyObject_SetAttrString(main, "input_paths", paths) == 0)
+                result = PyRun_SimpleString(compile_code_script);
+            Py_DECREF(paths);
+        }
+    }
+    if (result != 0 && PyErr_Occurred()) PyErr_Print();
+    PyGILState_Release(gil);
+    const auto ms = duration_cast<milliseconds>(
+        high_resolution_clock::now() - started).count();
+    LOG_F(INFO, "compilecode %s (%lld ms)", result == 0 ? "completed" : "failed",
+          static_cast<long long>(ms));
+    return result == 0 ? 0 : 3;
 }
 
 int cmd_unpyj(cmd_args* args) {
@@ -221,10 +213,11 @@ int cmd_help() {
 int cmd_genkey(cmd_args *args) {
     LOG_F(INFO,"making code accessors");
 
-    if (make_code_accessors(args->password)) {
-        LOG_F(INFO,"code accessors generated sucessfully");
+    if (!make_code_accessors(args->password)) {
+        LOG_F(ERROR, "unable to generate RSA key pair");
+        return 3;
     }
-
+    LOG_F(INFO, "code accessors generated successfully");
     return 0;
 }
 
