@@ -51,7 +51,10 @@ git submodule update --init --recursive
 ```
 
 The required submodules include `python-cmake-buildsystem`, `crc32c`, `loguru`,
-`inih`, `uncompyle2`, and `uncompyle6`. For the initial configure, CMake also
+`inih`, `uncompyle2`, and `uncompyle6`. Note: the current embedded scripts
+use `uncompyle2`; `uncompyle6` has additional Python dependencies (`xdis` and
+`spark-parser`) which are **not bundled**, so its standalone use requires
+further dependency work. For the initial configure, CMake also
 downloads Python 2.7.13 source from python.org (unless already provided locally).
 
 ### 3. Configure and compile a native Linux binary
@@ -225,6 +228,7 @@ re-validated; use the last known-good Windows release if you need it immediately
 | OpenSSL RSA/SHA1 and 3DES legacy key support | Implemented experimentally; verify against original client files |
 | Synthetic local test harness | Added; not yet fully validated |
 | `compilelib` / `dumplib` | Still unverified/nonfunctional upstream |
+| Optional `uncompyle6` runtime dependencies | Not yet bundled (`xdis`, `spark-parser`) |
 | External `eveloader2` and EVE client | Out of scope for this repository |
 | GitHub Actions CI/CD | Disabled; manual local builds only |
 | `scripts/build-linux.sh` helper | Implemented; no hosted build service required |
