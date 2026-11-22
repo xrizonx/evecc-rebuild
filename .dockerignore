@@ -1,0 +1,27 @@
+# Do not leak keys, client content, local build trees or Git history into images.
+.git
+**/.git
+**/.git/*
+build/
+build-*/
+cmake-build-*/
+**/CMakeCache.txt
+**/CMakeFiles/
+**/.build_cache/
+**/evecc.log
+work/
+dist/
+*.tar.gz
+*.tgz
+**/evecc.keys.*
+**/ccp.keys.*
+**/compiled.code
+**/*.pyc
+**/*.pyo
+**/__pycache__/
+.env
+.env.*
+!.env.example
+
+# Keep all six vendor submodules, native sources, tests, CMake files,
+# license and documentation in the Docker build context.
