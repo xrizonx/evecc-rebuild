@@ -44,6 +44,17 @@ def main():
     password = "native-ci-smoke-test"
     with tempfile.TemporaryDirectory(prefix="evecc-linux-smoke-") as base:
         root = Path(base)
+        # Validate runtime import from the self-contained zip rather than
+        # packages installed on the host. The embedded interpreter is Python 2.
+        imported = root / "verify_bundle.py"
+        imported.write_text(
+            "import uncompyle2, uncompyle6, xdis, spark_parser, click, six\n"
+            "from uncompyle6.main import decompile\n"
+            "assert callable(decompile)\n"
+            "assert __import__('sys').version_info[:2] == (2, 7)\n",
+            encoding="ascii")
+        run([binary, "runscript", "-i", imported], root)
+
         run([binary, "genkeys", "--password", password], root)
         pub = (root / "evecc.keys.pub").read_bytes()
         priv = (root / "evecc.keys.priv").read_bytes()
