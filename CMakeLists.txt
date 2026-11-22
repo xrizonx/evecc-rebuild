@@ -3,8 +3,8 @@ project(evecc LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(NOT WIN32 AND NOT UNIX)
-    message(FATAL_ERROR "evecc supports native Windows and Linux builds")
+if(NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "EVECC currently supports native Windows and Linux only; macOS/BSD need a separate crypto backend")
 endif()
 
 option(EVECC_BUILD_PACKAGE "Create a portable distribution archive" ON)
@@ -31,12 +31,17 @@ if(UNIX AND NOT APPLE)
     set(ENABLE_HASHLIB OFF CACHE BOOL "Disable incompatible Python 2.7 OpenSSL hashing extension" FORCE)
 endif()
 
-foreach(submodule IN ITEMS crc32c loguru python-cmake-buildsystem uncompyle2 uncompyle6 inih)
-    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/${submodule}")
-        message(FATAL_ERROR "Missing ${submodule}; run git submodule update --init --recursive")
+foreach(path IN ITEMS
+    vendor/crc32c/CMakeLists.txt
+    vendor/loguru/CMakeLists.txt
+    vendor/python-cmake-buildsystem/CMakeLists.txt
+    vendor/inih/ini.c
+    vendor/uncompyle2/uncompyle2/__init__.py
+    vendor/uncompyle6/uncompyle6/__init__.py)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${path}")
+        message(FATAL_ERROR "Missing ${path}; run git submodule update --init --recursive")
     endif()
 endforeach()
-
 add_subdirectory(vendor/crc32c)
 add_subdirectory(vendor/loguru)
 add_subdirectory(vendor/python-cmake-buildsystem)
@@ -141,7 +146,8 @@ add_dependencies(evecc evecc_python_dependencies)
 include(GNUInstallDirs)
 install(TARGETS evecc RUNTIME DESTINATION ".")
 install(DIRECTORY "${EVECC_PYTHON_DIR}/" DESTINATION "Python")
-install(FILES readme.md DESTINATION ".")
+install(FILES readme.md LICENSE DESTINATION ".")
+install(FILES docs/linux.md DESTINATION "docs")
 if(EVECC_BUILD_PACKAGE)
     set(CPACK_PACKAGE_NAME "evecc")
     set(CPACK_PACKAGE_VERSION "0.1.0")
