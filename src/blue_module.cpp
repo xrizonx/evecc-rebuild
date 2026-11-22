@@ -87,7 +87,7 @@ static PyObject *blue_SetBuildCache(PyObject *self, PyObject *args) {
     char *code_path = NULL;
     char *code_data = NULL;
     int code_data_size = 0;
-    if (!PyArg_ParseTuple(args, "s|s#", &code_path, &code_data, &code_data_size)) {
+    if (!PyArg_ParseTuple(args, "ss#", &code_path, &code_data, &code_data_size)) {
         PyErr_SetString(PyExc_TypeError, "expected (string, buffer)");
         return NULL;
     }
