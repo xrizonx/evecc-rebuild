@@ -2,50 +2,62 @@
 
 static const char *uncompile_lib_script = R"ADFAAF(
 import blue
-import zipfile
-import zlib
 import os
+import shutil
+import tempfile
+import zipfile
 import marshal
 import uncompyle2
 
-# Run this code within EVE works on NEW eve builds
-with zipfile.ZipFile(input_path, "r") as zf:
-    print input_path + " opened!"
-    for filename in zf.namelist():
-        filename = os.path.normpath(filename.replace('\\', '/'))
-        if (os.path.isabs(filename) or filename == '..' or
-            filename.startswith('../') or ':' in filename.split('/')[0]):
-            raise ValueError("Unsafe library entry: " + repr(filename))
-        if "appConst.pyj" in filename:
-            continue
-        if filename[-4:] == ".pyj":
-            print filename
-            data = blue.UnjumbleString(zf.read(filename), True)
-            code = marshal.loads(data[8:])
-            head, tail = os.path.split(filename)
-            newfile = os.path.join(output_path, head)
-            if not os.path.isdir(newfile):
-                os.makedirs(newfile)
+def decode_source(code, out):
+    try:
+        uncompyle2.uncompyle('2.7', code, out)
+    except Exception as first_error:
+        print "uncompyle2 failed; retrying with uncompyle6: " + str(first_error)
+        out.seek(0)
+        out.truncate()
+        from uncompyle6.main import decompile
+        decompile(code, out=out)
 
-            out_file = os.path.join(newfile, tail[:-4] + ".pyo")
-            out_file_py = os.path.join(newfile, tail[:-4] + ".py")
+def unpack_library(input_archive, output_folder):
+    target = os.path.abspath(output_folder)
+    if os.path.exists(target):
+        raise IOError("Library output already exists; choose a fresh -o: " + target)
+    parent = os.path.dirname(target)
+    if not os.path.isdir(parent):
+        os.makedirs(parent)
+    stage = tempfile.mkdtemp(prefix=".evecc-lib-", dir=parent)
+    try:
+        count = 0
+        with zipfile.ZipFile(input_archive, "r") as archive:
+            for original in archive.namelist():
+                filename = os.path.normpath(original.replace('\\', '/'))
+                if (os.path.isabs(filename) or filename == '..' or
+                    filename.startswith('../') or chr(0) in filename or
+                    ':' in filename.split('/')[0]):
+                    raise ValueError("Unsafe library ZIP entry: " + repr(original))
+                if not filename.endswith('.pyj') or "appConst.pyj" in filename:
+                    continue
+                decoded = blue.UnjumbleString(archive.read(original), True)
+                if len(decoded) < 9:
+                    raise ValueError("Truncated encrypted Python library entry: " + original)
+                code = marshal.loads(decoded[8:])
+                destination = os.path.join(stage, filename[:-4] + ".py")
+                folder = os.path.dirname(destination)
+                if not os.path.isdir(folder):
+                    os.makedirs(folder)
+                with open(destination, 'wb') as output:
+                    decode_source(code, output)
+                print "Decompiled " + filename
+                count += 1
+        os.rename(stage, target)
+        print "Extracted %d Python library entries" % count
+    except:
+        if os.path.isdir(stage):
+            shutil.rmtree(stage)
+        raise
 
-            f = open(out_file_py, "wb")
-            print " >> decompiling " + out_file + " -> " + out_file_py
-            try:
-                try:
-                    uncompyle2.uncompyle('2.7', code, f)
-                except Exception as original_error:
-                    print " >> uncompyle2 failed; retrying with uncompyle6: " + str(original_error)
-                    f.seek(0)
-                    f.truncate()
-                    from uncompyle6.main import decompile
-                    decompile(code, out=f)
-            except Exception as e:
-                f.close()
-                os.remove(out_file_py)
-                raise RuntimeError("Unable to decompile %s: %s" % (filename, e))
-            f.close()
+unpack_library(input_path, output_path)
 )ADFAAF";
 
 static const char *uncompile_code_script = R"ADFAAF(
@@ -127,40 +139,57 @@ except:
 )ADFAAF";
 
 static const char *compile_lib_script = R"ADFAAF(
-import zipfile
-import os
 import blue
+import imp
 import marshal
+import os
+import struct
 import time
-import py_compile
+import zipfile
 
-import tempfile
-import os.path
+def pack_library(source_folder, output_file):
+    root = os.path.abspath(source_folder)
+    output_file = os.path.abspath(output_file)
+    if not os.path.isdir(root):
+        raise IOError("No such library source directory: " + root)
+    if os.path.exists(output_file):
+        raise IOError("Refusing to replace existing archive: " + output_file)
 
-def PackCode(path, out):
-     with zipfile.ZipFile(out, "w") as zf:
-        for root, dirs, files in os.walk(path):
-            for file in files:
-                filename = os.path.join(root, file)
-                if os.path.splitext(filename)[1] != ".py":
-                    print "Skipping " + filename
-                    continue
-                newfilename = os.path.splitext(filename)[0] + ".pyj"
-                newfilename = newfilename.split(path)[1][1:]
-                print newfilename
-                f = open(filename, "r")
-                #data = f.read()
-                code2 = compile(f.read(), filename.encode("utf-8"), "exec")
-                #data = blue.crypto.JumbleString(f.read(), True)
-                base_data = marshal.dumps(code2)
-                data = blue.JumbleString(base_data, True)
-                test = blue.UnjumbleString(data, True)
-                if test != base_data:
-                    raise Exception("Data mismatch")
-                zf.writestr(newfilename.encode('cp1252'), data)
-                f.close()
+    count = 0
+    try:
+        with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_STORED) as archive:
+            for folder, dirs, files in os.walk(root):
+                dirs.sort()
+                files.sort()
+                for filename in files:
+                    if not filename.endswith('.py'):
+                        continue
+                    source_path = os.path.join(folder, filename)
+                    relative = os.path.relpath(source_path, root)
+                    archive_name = os.path.splitext(relative)[0].replace('\\', '/') + '.pyj'
+                    with open(source_path, 'rb') as source_file:
+                        code = compile(source_file.read(), source_path, 'exec')
+                    # Python 2.7 .pyc-format header: 4-byte magic and
+                    # 4-byte timestamp, then marshal-serialized code.
+                    header = imp.get_magic() + struct.pack('<I', int(time.time()))
+                    original = header + marshal.dumps(code)
+                    encrypted = blue.JumbleString(original, True)
+                    if blue.UnjumbleString(encrypted, True) != original:
+                        raise RuntimeError("Encrypt/decrypt mismatch: " + relative)
+                    archive.writestr(archive_name, encrypted)
+                    count += 1
+                    print "Compiled " + relative + " -> " + archive_name
+        if not count:
+            os.remove(output_file)
+            raise ValueError("No Python 2.7 .py sources found in " + root)
+    except:
+        # An incomplete archive is not a usable library.
+        if os.path.exists(output_file):
+            os.remove(output_file)
+        raise
+    print "Created %s with %d entries" % (output_file, count)
 
-PackCode(input_path, output_path)
+pack_library(input_path, output_path)
 )ADFAAF";
 
 static const char *compile_code_script = R"ADFAAF(
