@@ -7,6 +7,7 @@
 #include <openssl/sha.h>
 #include <openssl/objects.h>
 #include <openssl/err.h>
+#include <openssl/crypto.h>
 #include <zlib.h>
 #include <loguru/loguru.hpp>
 
@@ -21,6 +22,9 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 namespace {
 constexpr size_t RSA_BYTES = 128;
@@ -71,7 +75,9 @@ std::vector<unsigned char> read_file(const std::string& filename) {
     if (!file) return {};
     if (std::fseek(file, 0, SEEK_END) != 0) { std::fclose(file); return {}; }
     const long size = std::ftell(file);
-    if (size < 0 || std::fseek(file, 0, SEEK_SET) != 0) {
+    // Key files are at most hundreds of bytes, not unbounded user data.
+    if (size <= 0 || size > 1024 * 1024 ||
+        std::fseek(file, 0, SEEK_SET) != 0) {
         std::fclose(file); return {};
     }
     std::vector<unsigned char> bytes(static_cast<size_t>(size));
@@ -82,17 +88,29 @@ std::vector<unsigned char> read_file(const std::string& filename) {
 }
 
 bool write_file(const std::string& filename, const char* data, size_t len, bool secret) {
-    FILE* file = std::fopen(filename.c_str(), "wb");
-    if (!file) return false;
+    if (!data || !len) return false;
+    // O_EXCL prevents accidental private-key replacement and symlink attacks.
+    // Enforce mode 0600 *when creating* secrets, not after writing their bytes.
+    const int flags = O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW;
+    const int fd = ::open(filename.c_str(), flags, secret ? 0600 : 0644);
+    if (fd < 0) {
+        LOG_F(ERROR, "Cannot create %s (already exists or permission denied): %s",
+              filename.c_str(), get_last_error_string().c_str());
+        return false;
+    }
+    FILE* file = ::fdopen(fd, "wb");
+    if (!file) {
+        ::close(fd);
+        ::unlink(filename.c_str());
+        return false;
+    }
     const size_t written = std::fwrite(data, 1, len, file);
     const int closed = std::fclose(file);
-    if (secret) {
-        std::error_code ec;
-        std::filesystem::permissions(filename,
-            std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
-            std::filesystem::perm_options::replace, ec);
+    if (written != len || closed != 0) {
+        ::unlink(filename.c_str());
+        return false;
     }
-    return written == len && closed == 0;
+    return true;
 }
 
 // CryptoAPI CryptDeriveKey(CALG_RC4, SHA1(password)) with 128-bit RC4
@@ -282,14 +300,16 @@ HCRYPTKEY CryptContext::GetKey(CryptKeyType type) {
 keys_blob::keys_blob() : pub_key(nullptr), priv_key(nullptr), crypt_blob(nullptr),
     pub_key_size(0), priv_key_size(0), crypt_blob_size(0) {}
 
-void keys_blob::dump(const char* prefix) {
+bool keys_blob::dump(const char* prefix) {
     const std::string base = prefix ? prefix : "";
-    if (pub_key && !write_file(base + "pub", pub_key, pub_key_size, false))
-        LOG_F(ERROR, "Failed writing %spub", base.c_str());
-    if (priv_key && !write_file(base + "priv", priv_key, priv_key_size, true))
-        LOG_F(ERROR, "Failed writing %spriv", base.c_str());
-    if (crypt_blob && !write_file(base + "crypt", crypt_blob, crypt_blob_size, true))
-        LOG_F(ERROR, "Failed writing %scrypt", base.c_str());
+    bool ok = true;
+    if (pub_key)
+        ok = write_file(base + "pub", pub_key, pub_key_size, false) && ok;
+    if (priv_key)
+        ok = write_file(base + "priv", priv_key, priv_key_size, true) && ok;
+    if (crypt_blob)
+        ok = write_file(base + "crypt", crypt_blob, crypt_blob_size, true) && ok;
+    return ok;
 }
 
 keys_blob* load_keys_blob(const char* prefix) {
@@ -432,9 +452,9 @@ bool make_code_accessors(char* password) {
     result.pub_key_size = pub.size();
     result.priv_key = reinterpret_cast<char*>(priv.data());
     result.priv_key_size = priv.size();
-    result.dump(EVECC_ROAMING_KEYS);
+    const bool written = result.dump(EVECC_ROAMING_KEYS);
     OPENSSL_cleanse(priv.data(), priv.size());
-    return true;
+    return written;
 }
 
 CryptKeyType parse_key_type(char* type) {
