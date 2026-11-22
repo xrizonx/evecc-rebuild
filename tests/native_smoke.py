@@ -140,6 +140,23 @@ def main():
              "-i", code_file, "-o", decoded_file], root)
         assert decoded_file.stat().st_size > 20
 
+        # Experimental encrypted-library round trip. This was historically
+        # incomplete upstream; verify the 8-byte pyc header and safe ZIP paths.
+        library_source = root / "lib-src"
+        library_source.mkdir()
+        (library_source / "example.py").write_text(
+            "example_value = 42\n", encoding="ascii")
+        library_archive = root / "example.ccp"
+        run([binary, "compilelib", "--password", password,
+             "-i", library_source, "-o", library_archive], root)
+        assert library_archive.is_file()
+        library_output = root / "library-unpacked"
+        run([binary, "dumplib", "--password", password,
+             "-i", library_archive, "-o", library_output], root)
+        recovered_library_source = library_output / "example.py"
+        assert recovered_library_source.is_file()
+        assert recovered_library_source.stat().st_size > 0
+
         script = root / "check_marshal.py"
         script.write_text(
             "import marshal\n"
