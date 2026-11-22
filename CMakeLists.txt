@@ -130,12 +130,20 @@ add_custom_command(OUTPUT "${EVECC_PYTHON_DIR}/uncompyle2.zip"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/vendor/uncompyle2"
     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/uncompyle2/uncompyle2"
     VERBATIM)
+set(EVECC_WHEEL_CACHE "${CMAKE_BINARY_DIR}/wheel-cache" CACHE PATH
+    "Directory for SHA256-verified, cached Python 2 decompiler wheels")
+file(GLOB_RECURSE EVECC_UNCOMPYLE6_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/vendor/uncompyle6/uncompyle6/*.py")
 add_custom_command(OUTPUT "${EVECC_PYTHON_DIR}/uncompyle6.zip"
-    COMMAND "${CMAKE_COMMAND}" -E make_directory "${EVECC_PYTHON_DIR}"
-    COMMAND "${CMAKE_COMMAND}" -E tar cf
-        "${EVECC_PYTHON_DIR}/uncompyle6.zip" --format=zip uncompyle6
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/vendor/uncompyle6"
-    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/uncompyle6/uncompyle6"
+    COMMAND "${CMAKE_COMMAND}"
+        "-DEVECC_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DEVECC_OUTPUT_DIR=${EVECC_PYTHON_DIR}"
+        "-DEVECC_WHEEL_CACHE=${EVECC_WHEEL_CACHE}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/bundle-uncompyle6.cmake"
+    DEPENDS ${EVECC_UNCOMPYLE6_SOURCES}
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/bundle-uncompyle6.cmake"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/uncompyle6-wheels.cmake"
+    COMMENT "Bundling Python 2 uncompyle6 with pinned xdis, spark-parser, click and six"
     VERBATIM)
 add_custom_target(evecc_python_dependencies ALL DEPENDS
     "${EVECC_LIB_STAMP}"
