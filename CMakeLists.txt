@@ -22,6 +22,12 @@ set(CRC32C_USE_GLOG OFF CACHE BOOL "" FORCE)
 set(LOGURU_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LOGURU_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(LOGURU_INSTALL OFF CACHE BOOL "" FORCE)
+# Python 2.7's _curses directly accesses ncurses WINDOW internals removed
+# from recent ncurses headers. The optional extension is not used by evecc.
+if(UNIX AND NOT APPLE)
+    set(ENABLE__CURSES OFF CACHE BOOL "Disable incompatible Python 2.7 curses" FORCE)
+    set(ENABLE__CURSES_PANEL OFF CACHE BOOL "Disable incompatible Python 2.7 curses panel" FORCE)
+endif()
 
 foreach(submodule IN ITEMS crc32c loguru python-cmake-buildsystem uncompyle2 uncompyle6 inih)
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/${submodule}")
@@ -32,6 +38,13 @@ endforeach()
 add_subdirectory(vendor/crc32c)
 add_subdirectory(vendor/loguru)
 add_subdirectory(vendor/python-cmake-buildsystem)
+# Python 2.7.13's posixmodule.c expects makedev/major/minor to be defined
+# transitively by sys/types.h; modern glibc moved them to sys/sysmacros.h.
+if(UNIX AND NOT APPLE)
+    target_compile_options(libpython-static PRIVATE
+        "$<$<COMPILE_LANGUAGE:C>:-include>"
+        "$<$<COMPILE_LANGUAGE:C>:sys/sysmacros.h>")
+endif()
 
 find_package(ZLIB REQUIRED)
 if(UNIX AND NOT APPLE)
