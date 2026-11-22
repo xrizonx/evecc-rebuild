@@ -1,4 +1,6 @@
+#ifndef Py_NO_ENABLE_SHARED
 #define Py_NO_ENABLE_SHARED
+#endif
 #include <Python.h>
 
 #include <cstdio>
@@ -125,8 +127,8 @@ int main(int argc, char** argv) {
         fs::remove_all(".build_cache", ec);
         if (ec) { LOG_F(ERROR, "Unable to clear cache: %s", ec.message().c_str()); result = 1; }
     } else {
-        const bool needs_crypto = args.do_dumpcode || args.do_runscript ||
-            args.do_console || args.do_unpyj || args.do_compilelib ||
+        const bool needs_crypto = args.do_dumpcode ||
+            args.do_unpyj || args.do_compilelib ||
             args.do_compilecode || args.do_dumplib;
         if (needs_crypto) {
             result = init_cryptcontext(args.password);
