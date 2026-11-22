@@ -1,6 +1,8 @@
 #pragma once
 
+#ifndef Py_NO_ENABLE_SHARED
 #define Py_NO_ENABLE_SHARED
+#endif
 #include "Python.h"
 
 PyMODINIT_FUNC initblue(void);
