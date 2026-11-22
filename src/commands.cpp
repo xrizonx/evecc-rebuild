@@ -8,8 +8,12 @@
 #include "util.h"
 
 #include "scripts.h"
+#ifdef _MSC_VER
 #pragma warning(push)
+#endif
+#ifdef _MSC_VER
 #pragma warning(disable:5033)
+#endif
 // this is just some dumb shit to prevent it from trying to load python27_d.lib
 #ifdef _DEBUG
 #undef _DEBUG
@@ -18,7 +22,9 @@
 #else
 #include "Python.h"
 #endif
+#ifdef _MSC_VER
 #pragma warning(pop)
+#endif
 
 using namespace std::chrono;
 
@@ -75,7 +81,6 @@ int cmd_dumplib(cmd_args *args) {
     fflush(stdout);
 
     return 0;
-    return 0;
 }
 
 int cmd_compilecode(cmd_args *args) {
@@ -122,6 +127,7 @@ int cmd_compilecode(cmd_args *args) {
 }
 
 int cmd_unpyj(cmd_args *args) {
+    if (!args || !args->input_file || !args->output_file) return 2;
 	FILE *f = fopen(args->input_file, "rb");
 	if (f == NULL) {
 		LOG_F(ERROR,"cmd_unpyj: unable to open input file");
@@ -138,9 +144,12 @@ int cmd_unpyj(cmd_args *args) {
 
 	char *out = (char *)calloc(1, size * 2);
 	uint32_t os = UnjumbleString(data, size, out, size * 2, ctx->set_key_type);
+    if (!os || os > size * 2) { free(data); free(out); return 3; }
 	f = fopen(args->output_file, "wb");
 	fwrite(out, os, 1, f);
 	fclose(f);
+    free(data);
+    free(out);
 	return 0;
 }
 
@@ -172,7 +181,7 @@ int cmd_compilelib(cmd_args *args) {
 
 
 static const char *help_text = R"ADFAAF(
-%s(%s): Compile shit for EVE
+%s(%s): Compile EVE legacy client code
 
   commands:
     genkeys                            | generate several necessary files
@@ -190,7 +199,7 @@ static const char *help_text = R"ADFAAF(
     --no-cache: disables build caching
 )ADFAAF";
 int cmd_help() {
-	printf(help_text, __argv[0], GIT_HASH);
+	printf(help_text, "evecc", GIT_HASH);
 
 	return 0;
 }
@@ -229,8 +238,8 @@ int cmd_dumpkeys(cmd_args *args) {
     keys->crypt_blob  = (char *)calloc(TDES_LEN, sizeof(char));
 
     LOG_F(INFO,"scanning for RSA public key");
-    char *ptr = (char *)memmem(buf, size, RSA_PUB, sizeof(RSA_PUB));
-    if (ptr == NULL) {
+    char *ptr = (char *)find_memory_pattern(buf, size, RSA_PUB, sizeof(RSA_PUB) - 1);
+    if (ptr == NULL || (ptr - buf) + RSA_LEN > size) {
         LOG_F(ERROR,"could not find RSA_PUB in input file: %s", args->input_file);
         return -2;
     }
@@ -240,8 +249,8 @@ int cmd_dumpkeys(cmd_args *args) {
     keys->pub_key_size = RSA_LEN;
 
     LOG_F(INFO,"scanning for 3DES crypt key");
-    ptr = (char *)memmem(buf, size, TDES_SIG, sizeof(TDES_SIG)-2);
-    if (ptr == NULL) {
+    ptr = (char *)find_memory_pattern(buf, size, TDES_SIG, sizeof(TDES_SIG) - 1);
+    if (ptr == NULL || (ptr - buf) + TDES_LEN > size) {
         LOG_F(INFO,"could not find TDES_SIG in input file: %s", args->input_file);
         return -3;
     }
