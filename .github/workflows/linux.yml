@@ -38,8 +38,8 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DENABLE__SSL=OFF \
-            -DENABLE__HASHLIB=OFF \
+            -DENABLE_SSL=OFF \
+            -DENABLE_HASHLIB=OFF \
             -DUSE_SYSTEM_OpenSSL=OFF
 
       - name: Compile Python 2.7 and EVECC
@@ -58,6 +58,7 @@ jobs:
           (cd build/smoke && ../evecc genkeys --password test-password)
           test "$(stat -c %s build/smoke/evecc.keys.pub)" -eq 148
           test "$(stat -c %s build/smoke/evecc.keys.priv)" -eq 596
+          python3 tests/native_smoke.py build/evecc
 
       - name: Package native Linux runtime
         run: cmake --build build --target package
