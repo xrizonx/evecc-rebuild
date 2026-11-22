@@ -221,50 +221,56 @@ int cmd_genkey(cmd_args *args) {
     return 0;
 }
 
-int cmd_dumpkeys(cmd_args *args) {
-    if (args->input_file == NULL) {
-        LOG_F(ERROR, "you must supply -i <input file>");
-        return -1;
+int cmd_dumpkeys(cmd_args* args) {
+    if (!args || !args->input_file) {
+        LOG_F(ERROR, "dumpkeys requires -i <blue.dll>");
+        return 2;
     }
-    FILE *f = fopen(args->input_file, "rb");
-    if (f == NULL) {
-        LOG_F(ERROR, "could not open input file: %s", args->input_file);
-        return -1;
+    // blue.dll is parsed as binary data only, never loaded as an executable.
+    FILE* input = std::fopen(args->input_file, "rb");
+    if (!input) {
+        LOG_F(ERROR, "Unable to open blue.dll: %s", args->input_file);
+        return 2;
     }
-    fseek(f, 0, SEEK_END);
-    int size = ftell(f);
-    rewind(f);
-    char *buf = (char *)malloc(size);
-    char *rewind = buf;
-    fread(buf, sizeof(char), size, f);
-    fclose(f);
-
-
-    keys_blob *keys = new keys_blob;
-    keys->pub_key = (char *)calloc(RSA_LEN, sizeof(char));
-    keys->crypt_blob  = (char *)calloc(TDES_LEN, sizeof(char));
-
-    LOG_F(INFO,"scanning for RSA public key");
-    char *ptr = (char *)find_memory_pattern(buf, size, RSA_PUB, sizeof(RSA_PUB) - 1);
-    if (ptr == NULL || (ptr - buf) + RSA_LEN > size) {
-        LOG_F(ERROR,"could not find RSA_PUB in input file: %s", args->input_file);
-        return -2;
+    if (std::fseek(input, 0, SEEK_END) != 0) {
+        std::fclose(input);
+        return 2;
     }
-    buf = rewind;
-    LOG_F(INFO, "RSA public key found!");
-    memcpy(keys->pub_key, ptr, RSA_LEN);
-    keys->pub_key_size = RSA_LEN;
-
-    LOG_F(INFO,"scanning for 3DES crypt key");
-    ptr = (char *)find_memory_pattern(buf, size, TDES_SIG, sizeof(TDES_SIG) - 1);
-    if (ptr == NULL || (ptr - buf) + TDES_LEN > size) {
-        LOG_F(INFO,"could not find TDES_SIG in input file: %s", args->input_file);
-        return -3;
+    const long length = std::ftell(input);
+    if (length <= 0 || length > 512L * 1024 * 1024 ||
+        std::fseek(input, 0, SEEK_SET) != 0) {
+        LOG_F(ERROR, "Invalid or excessive blue.dll size");
+        std::fclose(input);
+        return 2;
     }
-    LOG_F(INFO, "3DES crypt key found!");
-    memcpy(keys->crypt_blob, ptr, TDES_LEN);
-    keys->crypt_blob_size = TDES_LEN;
+    std::vector<char> data(static_cast<size_t>(length));
+    const size_t read = std::fread(data.data(), 1, data.size(), input);
+    std::fclose(input);
+    if (read != data.size()) return 2;
 
-    keys->dump(CCP_KEYS);
+    const char* pub = static_cast<const char*>(find_memory_pattern(
+        data.data(), data.size(), RSA_PUB, sizeof(RSA_PUB) - 1));
+    if (!pub || static_cast<size_t>(data.data() + data.size() - pub) < RSA_LEN) {
+        LOG_F(ERROR, "Unable to find complete RSA public key in %s", args->input_file);
+        return 3;
+    }
+
+    const char* crypt = static_cast<const char*>(find_memory_pattern(
+        data.data(), data.size(), TDES_SIG, sizeof(TDES_SIG) - 1));
+    if (!crypt || static_cast<size_t>(data.data() + data.size() - crypt) < TDES_LEN) {
+        LOG_F(ERROR, "Unable to find complete 3DES SIMPLEBLOB in %s", args->input_file);
+        return 3;
+    }
+
+    // keys_blob::dump writes the data immediately; its pointers do not
+    // outlive this function, so no heap allocations or leaked buffers.
+    keys_blob keys;
+    keys.pub_key = const_cast<char*>(pub);
+    keys.pub_key_size = RSA_LEN;
+    keys.crypt_blob = const_cast<char*>(crypt);
+    keys.crypt_blob_size = TDES_LEN;
+    keys.dump(CCP_KEYS);
+    LOG_F(INFO, "Extracted %zu-byte public key and %zu-byte 3DES key blob",
+          keys.pub_key_size, keys.crypt_blob_size);
     return 0;
 }
