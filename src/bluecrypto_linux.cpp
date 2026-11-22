@@ -271,7 +271,9 @@ TripleDesKey* selected_key(CryptKeyType type) {
 
 bool cipher(const unsigned char* input, size_t size, const TripleDesKey& key,
             bool encrypt, std::vector<unsigned char>& output) {
-    if (!input || size > INT_MAX) return false;
+    if ((!input && size) || size > INT_MAX) return false;
+    static const unsigned char empty_byte = 0;
+    if (!input) input = &empty_byte;
     EvpHandle context(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
     if (!context) return false;
     unsigned char iv[8] = {0};
@@ -408,7 +410,7 @@ char* JumbleString(const char* input, uint32_t input_size, uint32_t* out_size,
             reinterpret_cast<const Bytef*>(input), input_size, Z_DEFAULT_COMPRESSION);
         if (status != Z_OK) return nullptr;
         plain.resize(static_cast<size_t>(size));
-    } else {
+    } else if (input_size) {
         plain.assign(reinterpret_cast<const unsigned char*>(input),
                      reinterpret_cast<const unsigned char*>(input) + input_size);
     }
