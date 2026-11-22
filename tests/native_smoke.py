@@ -48,7 +48,7 @@ def main():
         pub = (root / "evecc.keys.pub").read_bytes()
         priv = (root / "evecc.keys.priv").read_bytes()
         assert len(pub) == 148 and pub[:2] == b"\x06\x02"
-        assert len(priv) == 596 and priv[:2] == b"\\x07\\x02"
+        assert len(priv) == 596 and priv[:2] == b"\x07\x02"
         # Safety regression: never overwrite an existing signing key pair.
         attempt = subprocess.run(
             [str(binary), "genkeys", "--password", password],
