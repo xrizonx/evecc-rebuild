@@ -33,9 +33,18 @@ with zipfile.ZipFile(input_path, "r") as zf:
             f = open(out_file_py, "wb")
             print " >> decompiling " + out_file + " -> " + out_file_py
             try:
-                uncompyle2.uncompyle('2.7', code, f)
+                try:
+                    uncompyle2.uncompyle('2.7', code, f)
+                except Exception as original_error:
+                    print " >> uncompyle2 failed; retrying with uncompyle6: " + str(original_error)
+                    f.seek(0)
+                    f.truncate()
+                    from uncompyle6.main import decompile
+                    decompile(code, out=f)
             except Exception as e:
-                print " >> failed to decompile " + str(e)
+                f.close()
+                os.remove(out_file_py)
+                raise RuntimeError("Unable to decompile %s: %s" % (filename, e))
             f.close()
 )ADFAAF";
 
@@ -80,7 +89,15 @@ def unpack_code(input_file, destination):
             os.makedirs(folder)
         try:
             with open(out_file, "wb") as output:
-                uncompyle2.uncompyle('2.7', code, output)
+                try:
+                    uncompyle2.uncompyle('2.7', code, output)
+                except Exception as original_error:
+                    print "uncompyle2 failed for %s; trying uncompyle6: %s" % (
+                        filename, original_error)
+                    output.seek(0)
+                    output.truncate()
+                    from uncompyle6.main import decompile
+                    decompile(code, out=output)
             print "Decompiled: " + filename
         except Exception as err:
             failures += 1
