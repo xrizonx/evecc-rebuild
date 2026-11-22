@@ -159,32 +159,35 @@ int cmd_unpyj(cmd_args* args) {
     return written == decoded_size && closed == 0 ? 0 : 2;
 }
 
-int cmd_compilelib(cmd_args *args) {
-	high_resolution_clock::time_point t1 = high_resolution_clock::now();
-	PyGILState_STATE s = PyGILState_Ensure();
-	PyObject *main = PyImport_AddModule("__main__");
-
-	if (args->input_file != NULL) {
-		PyObject *p = PyString_FromString(args->input_file);
-		PyObject_SetAttrString(main, "input_path", p);
-		Py_DECREF(p);
-	}
-
-	if (args->output_file != NULL) {
-		PyObject *o = PyString_FromString(args->output_file);
-		PyObject_SetAttrString(main, "output_path", o);
-		//Py_DECREF(o);
-	}
-	int r = PyRun_SimpleString(compile_lib_script);
-
-	PyGILState_Release(s);
-
-	high_resolution_clock::time_point t2 = high_resolution_clock::now();
-	auto duration = duration_cast<microseconds>(t2 - t1).count();
-	std::cout << "Compiled lib in " << duration << "us\n";
-	return r;
+int cmd_compilelib(cmd_args* args) {
+    if (!args || !args->input_file || !args->output_file) {
+        LOG_F(ERROR, "compilelib requires -i <Python-source-folder> and -o <archive.ccp>");
+        return 2;
+    }
+    std::error_code ec;
+    if (!std::filesystem::is_directory(args->input_file, ec) || ec) {
+        LOG_F(ERROR, "compilelib source directory does not exist: %s", args->input_file);
+        return 2;
+    }
+    if (std::filesystem::exists(args->output_file, ec) || ec) {
+        LOG_F(ERROR, "compilelib output already exists; back up or choose a new -o");
+        return 2;
+    }
+    const auto started = high_resolution_clock::now();
+    const PyGILState_STATE gil = PyGILState_Ensure();
+    PyObject* main = PyImport_AddModule("__main__");
+    const int result = main &&
+        set_python_string(main, "input_path", args->input_file) == 0 &&
+        set_python_string(main, "output_path", args->output_file) == 0 ?
+        PyRun_SimpleString(compile_lib_script) : -1;
+    if (result != 0 && PyErr_Occurred()) PyErr_Print();
+    PyGILState_Release(gil);
+    const auto ms = duration_cast<milliseconds>(
+        high_resolution_clock::now() - started).count();
+    LOG_F(INFO, "compilelib %s (%lld ms)", result == 0 ? "completed" : "failed",
+          static_cast<long long>(ms));
+    return result == 0 ? 0 : 3;
 }
-
 
 static const char *help_text = R"ADFAAF(
 EVECC (%s): EVE legacy compiled.code toolkit
@@ -200,6 +203,10 @@ USAGE:
       Compile edited Python 2.7 code from one or more directories.
   evecc unpyj -i <encrypted-file> -o <decoded-file>
       Decode a legacy JumbleString object.
+  evecc compilelib -i <source-folder> -o <archive.ccp>
+      EXPERIMENTAL: create encrypted Python 2.7 library ZIP.
+  evecc dumplib -i <archive.ccp> -o <new-folder>
+      EXPERIMENTAL: extract encrypted Python 2.7 library ZIP.
   evecc cleancache
       Remove the build cache in the current working directory.
   evecc runscript -i <script.py> | console | help
@@ -215,7 +222,7 @@ NOTES:
   - The Python runtime must remain beside the evecc executable in Python/.
   - Signing and extracted key files must be available in the current directory.
   - Existing key files and dumpcode output directories are not overwritten.
-  - compilelib/dumplib were marked non-functional in the upstream project.
+  - compilelib/dumplib are experimental and need real-client verification.
   - This command-line app does not run EVE or the external eveloader2 launcher.
 )ADFAAF";
 
