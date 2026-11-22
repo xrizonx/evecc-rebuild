@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
     PySys_SetPath(const_cast<char*>(py_path.c_str()));
     // Import the codecs registry after sys.path is populated. Python 2.7 may
     // initialize without it when embedded into a non-system executable.
-    if (PyRun_SimpleString("import encodings, codecs\\ncodecs.lookup('utf-8')") != 0) {
+    if (PyRun_SimpleString("import encodings, codecs; codecs.lookup('utf-8')") != 0) {
         LOG_F(ERROR, "Unable to initialize Python 2.7 encodings from %s",
               stdlib.string().c_str());
         Py_Finalize();
