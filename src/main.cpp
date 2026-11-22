@@ -116,6 +116,14 @@ int main(int argc, char** argv) {
     args.key_type = parse_argument(argc, argv, "-k");
     args.input_files = parse_all_string_args(argc, argv, "-I");
 
+    if (args.key_type && std::strcmp(args.key_type, "ccp") != 0 &&
+        std::strcmp(args.key_type, "roaming") != 0) {
+        LOG_F(ERROR, "Unknown -k key type: %s (expected ccp or roaming)",
+              args.key_type);
+        Py_Finalize();
+        return 2;
+    }
+
     set_cache_arguments(argc, argv);
     set_do_build_cache(!args.do_nocache);
     int result = 0;
@@ -158,7 +166,7 @@ int main(int argc, char** argv) {
                         std::fclose(file);
                     }
                 }
-            } else result = cmd_help();
+            } else { cmd_help(); result = 2; }
         }
     }
 
