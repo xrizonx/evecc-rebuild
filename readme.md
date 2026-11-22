@@ -51,11 +51,14 @@ git submodule update --init --recursive
 ```
 
 The required submodules include `python-cmake-buildsystem`, `crc32c`, `loguru`,
-`inih`, `uncompyle2`, and `uncompyle6`. Note: the current embedded scripts
-use `uncompyle2`; `uncompyle6` has additional Python dependencies (`xdis` and
-`spark-parser`) which are **not bundled**, so its standalone use requires
-further dependency work. For the initial configure, CMake also
-downloads Python 2.7.13 source from python.org (unless already provided locally).
+`inih`, `uncompyle2`, and `uncompyle6`. The build now automatically
+bundles the Python 2-compatible `xdis 6.1.1`, `spark-parser 1.9.0`,
+`click 7.1.2`, and `six 1.16.0` wheels inside `uncompyle6.zip`, with
+**SHA-256 verification** and a reusable `build/wheel-cache/`. The EVECC
+decompiler uses `uncompyle2` first and retries with `uncompyle6` on failure.
+No system Python 2 packages or `pip install` are required. The first build
+downloads these wheels from PyPI and Python 2.7.13 source from python.org
+(unless the downloads are cached or a local Python source tree is supplied).
 
 ### 3. Configure and compile a native Linux binary
 
@@ -106,8 +109,38 @@ build/
 └── Python/
     ├── lib/python2.7/        # Linux Python 2.7.13 standard library
     ├── uncompyle2.zip
-    └── uncompyle6.zip
+    └── uncompyle6.zip        # uncompyle6 + xdis + spark_parser + click + six
 ```
+
+### Alternative: compile and run in Docker (still native Linux)
+
+Docker builds a **native Linux ELF executable**, not a Windows executable under
+Wine. The multi-stage `Dockerfile` uses Debian 12, caches the Python compiler
+and SHA-verified decompiler wheels, and produces a small non-root runtime image.
+Docker only needs to be installed on your build machine; no hosted CI/CD runs.
+
+```bash
+# Use a Docker installation that supports BuildKit/buildx.
+docker build --target runtime --build-arg BUILD_JOBS=2 \
+  -t evecc-native:local .
+
+# Inspect CLI help. ./work is mounted for persistent keys and files.
+mkdir -p work
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$(pwd)/work:/work" --network none \
+  evecc-native:local --help
+
+# Export the native ELF + Python package as a .tar.gz on your host.
+mkdir -p dist
+docker build --target release-archive \
+  --output type=local,dest=dist .
+```
+
+Docker builds run the synthetic smoke tests by default and **fail** if a
+test fails. See **[docs/docker.md](docs/docker.md)** for installation,
+volume permissions, offline caches, Compose usage, and troubleshooting.
+A Dockerfile is provided; **no prebuilt image has been published or
+verified in this environment**, which has no Docker daemon.
 
 ### 4. Check the locally built binary (no CI/CD)
 
@@ -259,12 +292,18 @@ CI/CD build or workflow is included.
 | OpenSSL RSA/SHA1 and 3DES legacy key support | Implemented experimentally; verify against original client files |
 | Synthetic local test harness | Added; not yet fully validated |
 | `compilelib` / `dumplib` | Still unverified/nonfunctional upstream |
-| Optional `uncompyle6` runtime dependencies | Not yet bundled (`xdis`, `spark-parser`) |
+| `uncompyle6` runtime dependencies | SHA-256-pinned Py2 wheels bundled in `uncompyle6.zip`; integration test pending |
+| Native Docker build/image/archive | Multi-stage Dockerfile, BuildKit caching, Compose and export; local build pending |
 | External `eveloader2` and EVE client | Out of scope for this repository |
 | GitHub Actions CI/CD | Disabled; manual local builds only |
 | Second-pass first-party code review | Completed; see `docs/audit.md` for findings and remaining verification |
 | `scripts/build-linux.sh` helper | Implemented; no hosted build service required |
 
-**Important:** EVECC preserves historical Python 2.7, SHA-1 and 3DES for
+**Important:** Third-party packages have their own licenses, including the
+GPL-3.0 `uncompyle6` dependency. Bundled wheel metadata and the uncompyle6
+license are retained inside the ZIP. Review license obligations before
+redistributing a package or image.
+
+EVECC preserves historical Python 2.7, SHA-1 and 3DES for
 format compatibility. Do not expose it as a network service or reuse these
 algorithms for new security-sensitive applications.
