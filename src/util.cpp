@@ -1,87 +1,65 @@
 #include "util.h"
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
+
+#include <cerrno>
+#include <cctype>
+#include <cstdlib>
+#include <cstring>
+#include <cwchar>
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
-const char *str_ext(const char *filename) {
-	const char *dot = strrchr(filename, '.');
-	if (!dot || dot == filename) return "";
-	return dot + 1;
+const char* str_ext(const char* filename) {
+    if (!filename) return "";
+    const char* dot = std::strrchr(filename, '.');
+    return !dot || dot == filename ? "" : dot + 1;
 }
 
-void *memmem(const void *l, size_t l_len, const void *s, size_t s_len) {
-	register char *cur, *last;
-	const char *cl = (const char *)l;
-	const char *cs = (const char *)s;
-
-	if (l_len == 0 || s_len == 0)
-		return NULL;
-
-	if (l_len < s_len)
-		return NULL;
-
-	if (s_len == 1)
-		return (void *)memchr(l, (int)*cs, l_len);
-
-	last = (char *)cl + l_len - s_len;
-
-	for (cur = (char *)cl; cur <= last; cur++)
-		if (cur[0] == cs[0] && memcmp(cur, cs, s_len) == 0)
-			return cur;
-
-	return NULL;
-}
-int hctoi(const char h) {
-	if (isdigit(h)) {
-		return h - '0';
-	} else {
-		return toupper(h) - 'A' + 10;
-	}
+void* find_memory_pattern(const void* haystack, size_t haystack_size,
+                          const void* needle, size_t needle_size) {
+    if (!haystack || !needle || !needle_size || needle_size > haystack_size)
+        return nullptr;
+    const auto* data = static_cast<const unsigned char*>(haystack);
+    const auto* pattern = static_cast<const unsigned char*>(needle);
+    for (size_t i = 0; i <= haystack_size - needle_size; ++i)
+        if (data[i] == pattern[0] &&
+            std::memcmp(data + i, pattern, needle_size) == 0)
+            return const_cast<unsigned char*>(data + i);
+    return nullptr;
 }
 
-wchar_t* chartow(const char* text)
-{
-	size_t size = strlen(text) + 1;
-	wchar_t* wa = (wchar_t *)calloc(size, sizeof(wchar_t));
-	mbstowcs(wa, text, size);
-	return wa;
+int hctoi(char h) {
+    const auto c = static_cast<unsigned char>(h);
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+wchar_t* chartow(const char* text) {
+    if (!text) return nullptr;
+    const size_t count = std::mbstowcs(nullptr, text, 0);
+    if (count == static_cast<size_t>(-1)) return nullptr;
+    auto* result = static_cast<wchar_t*>(std::calloc(count + 1, sizeof(wchar_t)));
+    if (result) std::mbstowcs(result, text, count + 1);
+    return result;
 }
 
 std::string get_last_error_string() {
-    DWORD err = GetLastError();
-    if (err == 0) {
-        return std::string();
-    }
-
-    LPSTR buf = NULL;
-    size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                                 NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&buf, 0, NULL);
-    std::string message(buf, size);
-    LocalFree(buf);
+#ifdef _WIN32
+    const DWORD err = GetLastError();
+    if (!err) return {};
+    LPSTR buffer = nullptr;
+    const DWORD size = FormatMessageA(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+        FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, err,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        reinterpret_cast<LPSTR>(&buffer), 0, nullptr);
+    const std::string message = buffer && size ? std::string(buffer, size) :
+                                "Windows error " + std::to_string(err);
+    if (buffer) LocalFree(buffer);
     return message;
+#else
+    return std::strerror(errno);
+#endif
 }
-
-/*
-void *memmem(const void *haystack, size_t hlen, const void *needle, size_t nlen)
-{
-	int needle_first;
-	const void *p = haystack;
-	size_t plen = hlen;
-
-	if (!nlen)
-		return NULL;
-
-	needle_first = *(unsigned char *)needle;
-
-	while (plen >= nlen && (p = memchr(p, needle_first, plen - nlen + 1))) {
-		if (!memcmp(p, needle, nlen))
-			return (void *)p;
-
-		p = ((char *)p) + 1;
-		plen = hlen - ((char *)p - haystack);
-	}
-
-	return NULL;
-}
-*/
