@@ -1,6 +1,10 @@
 # Local native build output (never commit binaries or extracted Python runtimes).
 /build/
 /build-*/
+/dist/
+/wheel-cache/
+/work/
+*.tar.gz
 /cmake-build-*/
 /CMakeFiles/
 /CMakeCache.txt
