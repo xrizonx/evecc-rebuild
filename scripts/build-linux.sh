@@ -7,6 +7,7 @@ BUILD_DIR="${ROOT}/build"
 JOBS=2
 BUILD_TYPE=Release
 COMPILER=default
+CUSTOM_BUILD_DIR=0
 PACKAGE=0
 TEST=0
 
@@ -18,7 +19,7 @@ Options:
   --build-dir PATH   CMake build directory (default ./build)
   --jobs N           Parallel compilation jobs (default 2)
   --debug            Build with debug symbols
-  --clang            Use native clang/clang++ (fresh build dir recommended)
+  --clang            Use native clang/clang++ (default build-clang directory)
   --package          Produce Linux .tar.gz package locally
   --test             Run Python 3 native smoke tests after building
   -h, --help         Show this message
@@ -32,7 +33,7 @@ while (($#)); do
   case "$1" in
     --build-dir)
       [[ $# -ge 2 ]] || { echo "Missing --build-dir value" >&2; exit 2; }
-      BUILD_DIR="$2"; shift 2 ;;
+      BUILD_DIR="$2"; CUSTOM_BUILD_DIR=1; shift 2 ;;
     --jobs)
       [[ $# -ge 2 && "$2" =~ ^[1-9][0-9]*$ ]] ||
         { echo "--jobs requires an integer greater than zero" >&2; exit 2; }
@@ -45,6 +46,17 @@ while (($#)); do
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [[ "$(uname -s)" != "Linux" ]]; then
+  echo "This helper supports native Linux only; use native CMake on Windows" >&2
+  exit 2
+fi
+if [[ "$COMPILER" == clang && "$CUSTOM_BUILD_DIR" -eq 0 ]]; then
+  BUILD_DIR="${ROOT}/build-clang"
+fi
+if [[ "$BUILD_DIR" != /* ]]; then
+  BUILD_DIR="${ROOT}/${BUILD_DIR}"
+fi
 
 for executable in cmake ninja git; do
   command -v "$executable" >/dev/null ||
@@ -74,6 +86,8 @@ cmake --build "${BUILD_DIR}" --parallel "$JOBS"
 if [[ "$TEST" -eq 1 ]]; then
   command -v python3 >/dev/null ||
     { echo "Install python3 to run smoke tests" >&2; exit 1; }
+  command -v openssl >/dev/null ||
+    { echo "Install openssl to run signature smoke tests" >&2; exit 1; }
   python3 "${ROOT}/tests/native_smoke.py" "${BUILD_DIR}/evecc"
 fi
 
