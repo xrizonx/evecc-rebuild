@@ -12,6 +12,10 @@ import uncompyle2
 with zipfile.ZipFile(input_path, "r") as zf:
     print input_path + " opened!"
     for filename in zf.namelist():
+        filename = os.path.normpath(filename.replace('\\', '/'))
+        if (os.path.isabs(filename) or filename == '..' or
+            filename.startswith('../') or ':' in filename.split('/')[0]):
+            raise ValueError("Unsafe library entry: " + repr(filename))
         if "appConst.pyj" in filename:
             continue
         if filename[-4:] == ".pyj":
@@ -20,10 +24,8 @@ with zipfile.ZipFile(input_path, "r") as zf:
             code = marshal.loads(data[8:])
             head, tail = os.path.split(filename)
             newfile = os.path.join(output_path, head)
-            try:
+            if not os.path.isdir(newfile):
                 os.makedirs(newfile)
-            except:
-                pass
 
             out_file = os.path.join(newfile, tail[:-4] + ".pyo")
             out_file_py = os.path.join(newfile, tail[:-4] + ".py")
@@ -65,6 +67,8 @@ def unpack_code(input_file, destination):
     failures = 0
     with open(input_file, "rb") as handle:
         magic, payload, signature = cPickle.load(handle)
+    if magic != 168686339:
+        raise ValueError("Unsupported compiled.code magic: %r" % magic)
     code_entries = cPickle.loads(payload)['code']
     print "Unpacking %d code entries" % len(code_entries)
     for (original_name, filetype), (encrypted, sort_key) in code_entries:
