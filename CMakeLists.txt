@@ -25,8 +25,10 @@ set(LOGURU_INSTALL OFF CACHE BOOL "" FORCE)
 # Python 2.7's _curses directly accesses ncurses WINDOW internals removed
 # from recent ncurses headers. The optional extension is not used by evecc.
 if(UNIX AND NOT APPLE)
-    set(ENABLE__CURSES OFF CACHE BOOL "Disable incompatible Python 2.7 curses" FORCE)
-    set(ENABLE__CURSES_PANEL OFF CACHE BOOL "Disable incompatible Python 2.7 curses panel" FORCE)
+    set(ENABLE_CURSES OFF CACHE BOOL "Disable incompatible Python 2.7 curses" FORCE)
+    set(ENABLE_CURSES_PANEL OFF CACHE BOOL "Disable incompatible Python 2.7 curses panel" FORCE)
+    set(ENABLE_SSL OFF CACHE BOOL "Disable incompatible Python 2.7 OpenSSL extension" FORCE)
+    set(ENABLE_HASHLIB OFF CACHE BOOL "Disable incompatible Python 2.7 OpenSSL hashing extension" FORCE)
 endif()
 
 foreach(submodule IN ITEMS crc32c loguru python-cmake-buildsystem uncompyle2 uncompyle6 inih)
@@ -66,7 +68,10 @@ target_include_directories(evecc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/vendor"
     "${CMAKE_CURRENT_BINARY_DIR}/gen"
+    "${CMAKE_CURRENT_BINARY_DIR}/vendor/Python-2.7.13/Include"
+    "${CMAKE_CURRENT_BINARY_DIR}/vendor/Python-2.7.13/PC"
     "${CMAKE_CURRENT_BINARY_DIR}/vendor/python-cmake-buildsystem/include"
+    "${CMAKE_CURRENT_BINARY_DIR}/vendor/python-cmake-buildsystem/bin"
     "${CMAKE_CURRENT_BINARY_DIR}/vendor/python-cmake-buildsystem/bin/PC"
 )
 target_link_libraries(evecc PRIVATE libpython-static crc32c loguru ZLIB::ZLIB)
