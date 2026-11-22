@@ -3,6 +3,7 @@
 //
 
 #include <iostream>
+#include <algorithm>
 #include "version.h"
 #include "commands.h"
 #include "util.h"
@@ -126,31 +127,44 @@ int cmd_compilecode(cmd_args *args) {
 	return r;
 }
 
-int cmd_unpyj(cmd_args *args) {
-    if (!args || !args->input_file || !args->output_file) return 2;
-	FILE *f = fopen(args->input_file, "rb");
-	if (f == NULL) {
-		LOG_F(ERROR,"cmd_unpyj: unable to open input file");
-		return -1;
-	}
+int cmd_unpyj(cmd_args* args) {
+    if (!args || !args->input_file || !args->output_file || !ctx) return 2;
+    FILE* file = fopen(args->input_file, "rb");
+    if (!file) return 2;
+    if (fseek(file, 0, SEEK_END) != 0) { fclose(file); return 2; }
+    const long length = ftell(file);
+    if (length <= 0 || length > 64L * 1024 * 1024) {
+        fclose(file);
+        LOG_F(ERROR, "Invalid or excessively large encrypted input");
+        return 2;
+    }
+    rewind(file);
+    std::vector<char> encrypted(static_cast<size_t>(length));
+    const size_t read = fread(encrypted.data(), 1, encrypted.size(), file);
+    fclose(file);
+    if (read != encrypted.size()) return 2;
 
-	fseek(f, 0, SEEK_END);
-	uint32_t size = ftell(f);
-	rewind(f);
-
-	char *data = (char *)calloc(1, size);
-	fread(data, 1, size, f);
-	fclose(f);
-
-	char *out = (char *)calloc(1, size * 2);
-	uint32_t os = UnjumbleString(data, size, out, size * 2, ctx->set_key_type);
-    if (!os || os > size * 2) { free(data); free(out); return 3; }
-	f = fopen(args->output_file, "wb");
-	fwrite(out, os, 1, f);
-	fclose(f);
-    free(data);
-    free(out);
-	return 0;
+    std::vector<char> output;
+    uint32_t decoded_size = 0;
+    // Decompressed bytecode may be more than 2x its encrypted size.
+    for (size_t capacity = std::max<size_t>(4096, encrypted.size() * 2);
+         capacity <= 128 * 1024 * 1024; capacity *= 2) {
+        output.resize(capacity);
+        const uint32_t len = UnjumbleString(
+            encrypted.data(), static_cast<uint32_t>(encrypted.size()),
+            output.data(), static_cast<uint32_t>(output.size()),
+            ctx->set_key_type);
+        if (len > 0 && len <= output.size()) { decoded_size = len; break; }
+    }
+    if (!decoded_size) {
+        LOG_F(ERROR, "Unable to decode input (wrong key or oversized output)");
+        return 3;
+    }
+    file = fopen(args->output_file, "wb");
+    if (!file) return 2;
+    const size_t written = fwrite(output.data(), 1, decoded_size, file);
+    const int closed = fclose(file);
+    return written == decoded_size && closed == 0 ? 0 : 2;
 }
 
 int cmd_compilelib(cmd_args *args) {
