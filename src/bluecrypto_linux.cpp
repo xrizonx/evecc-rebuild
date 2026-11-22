@@ -158,27 +158,37 @@ RsaHandle load_private_key(const char* buffer, size_t length, const char* passwo
         return {nullptr, RSA_free};
     }
     size_t pos = 20;
-    auto take = [&](size_t count) {
+    auto take = [&](size_t count) -> BnHandle {
         BIGNUM* bn = read_le(p + pos, count);
         pos += count;
-        return bn;
+        return BnHandle(bn, BN_free);
     };
-    BIGNUM* n = take(RSA_BYTES);
-    BIGNUM* e = BN_new();
-    if (e) BN_set_word(e, read_u32(p + 16));
-    BIGNUM* d = nullptr;
-    BIGNUM* prime1 = take(RSA_BYTES / 2);
-    BIGNUM* prime2 = take(RSA_BYTES / 2);
-    BIGNUM* exponent1 = take(RSA_BYTES / 2);
-    BIGNUM* exponent2 = take(RSA_BYTES / 2);
-    BIGNUM* coefficient = take(RSA_BYTES / 2);
-    d = take(RSA_BYTES);
-    const bool ok = n && e && d && prime1 && prime2 &&
-        exponent1 && exponent2 && coefficient &&
-        RSA_set0_key(rsa.get(), n, e, d) == 1 &&
-        RSA_set0_factors(rsa.get(), prime1, prime2) == 1 &&
-        RSA_set0_crt_params(rsa.get(), exponent1, exponent2, coefficient) == 1 &&
-        RSA_check_key(rsa.get()) == 1;
+    BnHandle n = take(RSA_BYTES);
+    BnHandle e(BN_new(), BN_free);
+    if (e) BN_set_word(e.get(), read_u32(p + 16));
+    BnHandle prime1 = take(RSA_BYTES / 2);
+    BnHandle prime2 = take(RSA_BYTES / 2);
+    BnHandle exponent1 = take(RSA_BYTES / 2);
+    BnHandle exponent2 = take(RSA_BYTES / 2);
+    BnHandle coefficient = take(RSA_BYTES / 2);
+    BnHandle d = take(RSA_BYTES);
+
+    bool ok = n && e && d && prime1 && prime2 &&
+        exponent1 && exponent2 && coefficient;
+    if (ok) {
+        ok = RSA_set0_key(rsa.get(), n.get(), e.get(), d.get()) == 1;
+        if (ok) { n.release(); e.release(); d.release(); }
+    }
+    if (ok) {
+        ok = RSA_set0_factors(rsa.get(), prime1.get(), prime2.get()) == 1;
+        if (ok) { prime1.release(); prime2.release(); }
+    }
+    if (ok) {
+        ok = RSA_set0_crt_params(rsa.get(), exponent1.get(),
+                                 exponent2.get(), coefficient.get()) == 1;
+        if (ok) { exponent1.release(); exponent2.release(); coefficient.release(); }
+    }
+    if (ok) ok = RSA_check_key(rsa.get()) == 1;
     OPENSSL_cleanse(raw.data(), raw.size());
     if (!ok) {
         LOG_F(ERROR, "Cannot import CryptoAPI signing key (invalid password or blob): %s",
