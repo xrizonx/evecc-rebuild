@@ -146,6 +146,22 @@ README, the Linux guide, and license information. It can run on compatible
 Linux hosts outside Docker after extraction, subject to their available
 system shared libraries.
 
+## Save or transfer the complete Docker image
+
+To carry the runtime image to another computer without a container registry:
+
+```bash
+docker save evecc-native:local | gzip -1 > evecc-native-image.tar.gz
+
+# On the other machine with Docker installed:
+docker load -i evecc-native-image.tar.gz
+docker run --rm --network none evecc-native:local --help
+```
+
+This is a **Docker image archive**, separate from the ELF/CPython CPack
+archive in Step 5. The Docker image contains the Debian 12 runtime libraries
+and can be larger than the native `.tar.gz` package.
+
 ## Step 6 — Optional Docker Compose workflow
 
 ```bash
