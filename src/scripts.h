@@ -153,10 +153,10 @@ def ScriptName(path):
     return os.path.basename(normalized)
 
 def CarbonName(path):
-    #s = path.split("")[1].replace('\\', '/')
-    #return s
-    s = path.split("carbon")[1].replace('\\', '/')
-    return "../carbon" + s
+    normalized = path.replace('\\', '/')
+    if '/carbon/' not in normalized:
+        raise ValueError("Expected source file beneath carbon/: " + normalized)
+    return "../carbon/" + normalized.split('/carbon/', 1)[1]
 
 def FindCodeFiles(root, files, isCarbon, base, idx):
     d = []
@@ -164,7 +164,7 @@ def FindCodeFiles(root, files, isCarbon, base, idx):
     for v in files:
         filename = os.path.join(root, v)
         name = ""
-        if "carbon" in filename:
+        if '/carbon/' in filename.replace('\\', '/'):
             name = "root:/" + CarbonName(filename)
         else:
             name = "script:/" + ScriptName(filename)
@@ -204,6 +204,8 @@ def Generate(base, output):
     for path in base:
         print "Checking " + path
         for root, dirs, files in os.walk(path):
+            dirs.sort()
+            files.sort()
             all['code'] = all['code'] + FindCodeFiles(root, files, False, path, idx)
             idx = idx + 1
 
