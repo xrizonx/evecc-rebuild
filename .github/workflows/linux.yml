@@ -1,0 +1,70 @@
+name: Native Linux build
+
+on:
+  push:
+    branches: [main, linux-native-port]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux ${{ matrix.os }} (x86_64)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install native compilation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            libssl-dev zlib1g-dev libbz2-dev libffi-dev \
+            libreadline-dev libsqlite3-dev libncurses-dev \
+            libgdbm-dev libgdbm-compat-dev liblzma-dev \
+            libexpat1-dev libcrypt-dev libdb-dev
+
+      - name: Configure native Linux build
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE__SSL=OFF \
+            -DENABLE__HASHLIB=OFF \
+            -DUSE_SYSTEM_OpenSSL=OFF
+
+      - name: Compile Python 2.7 and EVECC
+        run: cmake --build build --parallel 2
+
+      - name: Native runtime smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          file build/evecc
+          test -f build/Python/Lib/os.py
+          test -f build/Python/uncompyle2.zip
+          test -f build/Python/uncompyle6.zip
+          (cd build && ./evecc --help)
+          mkdir -p build/smoke
+          (cd build/smoke && ../evecc genkeys --password test-password)
+          test "$(stat -c %s build/smoke/evecc.keys.pub)" -eq 148
+          test "$(stat -c %s build/smoke/evecc.keys.priv)" -eq 596
+
+      - name: Package native Linux runtime
+        run: cmake --build build --target package
+
+      - name: Upload compiled executable and bundled runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: evecc-${{ matrix.os }}-linux-x86_64
+          path: build/evecc-Linux-*.tar.gz
+          if-no-files-found: error
