@@ -210,18 +210,29 @@ int cmd_help() {
 	return 0;
 }
 
-int cmd_genkey(cmd_args *args) {
-    LOG_F(INFO,"making code accessors");
-
+int cmd_genkey(cmd_args* args) {
+    if (!args || !args->password || !args->password[0]) {
+        LOG_F(ERROR, "genkeys requires a nonempty --password to encrypt its private key");
+        return 2;
+    }
+    if (HasFile(EVECC_ROAMING_KEYS "pub") ||
+        HasFile(EVECC_ROAMING_KEYS "priv")) {
+        LOG_F(ERROR, "Signing keys already exist; back them up before regenerating");
+        return 2;
+    }
     if (!make_code_accessors(args->password)) {
-        LOG_F(ERROR, "unable to generate RSA key pair");
+        LOG_F(ERROR, "Failed generating or writing signing keys");
         return 3;
     }
-    LOG_F(INFO, "code accessors generated successfully");
+    LOG_F(INFO, "Signing keypair generated successfully");
     return 0;
 }
 
 int cmd_dumpkeys(cmd_args* args) {
+    if (HasFile(CCP_KEYS "pub") || HasFile(CCP_KEYS "crypt")) {
+        LOG_F(ERROR, "Extracted client keys already exist; back them up before regenerating");
+        return 2;
+    }
     if (!args || !args->input_file) {
         LOG_F(ERROR, "dumpkeys requires -i <blue.dll>");
         return 2;
@@ -269,7 +280,10 @@ int cmd_dumpkeys(cmd_args* args) {
     keys.pub_key_size = RSA_LEN;
     keys.crypt_blob = const_cast<char*>(crypt);
     keys.crypt_blob_size = TDES_LEN;
-    keys.dump(CCP_KEYS);
+    if (!keys.dump(CCP_KEYS)) {
+        LOG_F(ERROR, "Failed writing one or more client key files");
+        return 3;
+    }
     LOG_F(INFO, "Extracted %zu-byte public key and %zu-byte 3DES key blob",
           keys.pub_key_size, keys.crypt_blob_size);
     return 0;
