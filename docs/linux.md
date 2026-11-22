@@ -19,10 +19,20 @@ sudo apt install -y git build-essential cmake ninja-build pkg-config \
 
 ## Clone, configure, build
 
-```bash
-git clone --recursive https://github.com/xrizonx/evecc-rebuild.git
-cd evecc-rebuild
+Until the native port is merged, check out the development branch:
 
+```bash
+git clone --branch linux-native-port --recurse-submodules \\
+  https://github.com/xrizonx/evecc-rebuild.git
+cd evecc-rebuild
+```
+
+**One-command manual builder:** `bash scripts/build-linux.sh --jobs 2`
+(optionally `--package` and `--test`). This never uses GitHub Actions.
+
+Alternatively, use CMake directly with the following commands.
+
+```bash
 # The pinned Python 2.7 code cannot compile its obsolete _ssl module
 # against modern OpenSSL 3. The EVECC encryption backend still links
 # to native OpenSSL and is unaffected.
