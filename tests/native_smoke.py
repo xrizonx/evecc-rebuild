@@ -56,7 +56,13 @@ def main():
         padded = b"\x00\x02" + b"\x03" * 101 + b"\x00" + tdes
         assert len(padded) == 128
         simple = bytes.fromhex("010200000366000000a40000") + padded[::-1]
-        (root / "ccp.keys.crypt").write_bytes(simple)
+        # Exercise the platform-independent binary key extraction command too.
+        # This is a synthetic DLL-shaped file, not a real client DLL.
+        fake_dll = root / "synthetic-blue.dll"
+        fake_dll.write_bytes(b"\\x00" * 40 + pub + b"\\x7e" * 31 + simple)
+        run([binary, "dumpkeys", "-i", fake_dll], root)
+        assert (root / "ccp.keys.pub").read_bytes() == pub
+        assert (root / "ccp.keys.crypt").read_bytes() == simple
 
         python_root = root / "script"
         src = python_root / "eve" / "client"
