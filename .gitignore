@@ -1,0 +1,29 @@
+# Local native build output (never commit binaries or extracted Python runtimes).
+/build/
+/build-*/
+/dist/
+/wheel-cache/
+/work/
+*.tar.gz
+/cmake-build-*/
+/CMakeFiles/
+/CMakeCache.txt
+/Testing/
+**/.build_cache/
+**/evecc.log
+
+# Legacy EVE cryptographic keys are confidential and client-specific.
+**/evecc.keys.*
+**/ccp.keys.*
+
+# Generated / extracted client files.
+**/compiled.code
+**/tmp_out/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Private environment settings.
+.env
+.env.*
+!.env.example

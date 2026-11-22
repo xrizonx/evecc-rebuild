@@ -1,52 +1,312 @@
-# evecc
-evecc is a tool for generating compiled.code files EVE online build 360229.
+# EVECC Rebuild — legacy EVE compiled.code toolkit
 
-## getting started
-Before starting, please make sure you have a copy of eveloader2 to run your code files.
-1. generate new keys
-```shell
-evecc.exe genkeys
-```
-2. extract the game's crypt key using `evecc.exe dumpkeys -i C:\path\to\Crucible\bin\blue.dll`.  This will generate `ccp.keys.crypt` and `ccp.keys.pub` files
-3. dump the game's client code with `evecc.exe dumpcode -i C:\path\to\Crucible\script\compiled.code -o eve_code`. this will take quite some time.  once complete you can modify the code in the `eve_code` directory.
-4. compile the game code with the following command `evecc.exe compilecode -o compiled.code -I eve_code\carbon\client -I eve_code\carbon\common -I eve_code\eve\common -I eve_code\eve\client`.  The output file should be copied to `C:\ProgramData\eveloader2\script\` in order for eveloader2 to pick up the changes.
-5. inject a custom eveloader2 patch - create a new file in your eveloader2 folder called `patches.ini` and make a folder `patches`.
-you will also want to copy your `evecc.keys.pub` and `ccp.keys.pub` into the `patches` folder.
-```ini
-[patches]
-patch_list=public_key
-[public_key]
-name="Patch public key"
-original_data=./patches/ccp.keys.pub
-patched_data=./patches/evecc.keys.pub
-```
-5. please be aware that once you patch your public key in, the game will not recognize the original `compiled.code` file.  You will have to compile one.
+EVECC reads and generates `compiled.code` for the legacy EVE Online **360229**
+client. The **Linux-native port is under development**: it is intended to
+compile as a Linux ELF executable with an embedded Python 2.7.13 runtime and
+native OpenSSL cryptography. It does **not** run the EVE game or the external
+Windows-only `eveloader2` launcher on Linux.
 
-## building evecc
-1. install [Build Tools for Visual Studio 2022](https://visualstudio.microsoft.com/downloads/)
-2. in the Visual Studio Installer, ensure the following items are installed
-   1. `.NET framework 4.7.2 SDK`
-   2. `.NET framework 4.7.2 targeting pack`
-   3. `CMake tools for Winddows`
-   4. `MSVC v143 - VS 2022 c++ x64/x86 build tools (Latest)`
-   5. `Windows Universal CRT SDK`
-   6. `C++ ATL for latest v143 build tools (x86 & x64)`
-   7. `C++ MFC for latest v143 build tools (x86 & x64)`
-   8. `Windows 10 SDK (<any version>)`
-   9. `Windows Universal C Runtime`
-3. install [7-Zip](https://www.7-zip.org/) required for building release zips
-4. install [Ninja](https://ninja-build.org/)
-5. in a command prompt, run the following bat file ``
-6. run the following commands from the source directory
-```shell
-"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-set vcpkg_default_triplet=x64-windows
-mkdir build
-cd build
-cmake -g "ninja" .. -DCMAKE_BUILD_TYPE=Release
-ninja
+> **Build status:** Work in progress; Debian/Ubuntu compilation and
+> CryptoAPI interoperability with real client key blobs still require
+> local verification. Do not assume production/client compatibility until
+> the full round-trip tests pass. The original `compilelib`/`dumplib` modes
+> were marked non-functional upstream and are now reworked experimentally,
+> without real-client validation.
+>
+> **CI/CD:** No Linux GitHub Actions workflow is used. Linux builds are
+> performed manually on your PC or server to avoid GitHub Actions minutes.
+
+## Native Linux quick start — Debian 12 / Ubuntu 22.04 and 24.04
+
+### 1. Install development tools and libraries
+
+Use a modern 64-bit Debian/Ubuntu installation. Install GCC, the C/C++ toolchain,
+CMake (3.20+), Ninja, Git, native OpenSSL, zlib and headers used by the
+pinned Python source. No Visual Studio, .NET, Wine, Windows SDK or
+Windows `python27.lib` is needed to compile the Linux version.
+
+```bash
+sudo apt update
+sudo apt install -y --no-install-recommends \
+  git ca-certificates file build-essential cmake ninja-build ccache pkg-config \
+  libssl-dev zlib1g-dev libbz2-dev libffi-dev \
+  libreadline-dev libsqlite3-dev libncurses-dev \
+  libgdbm-dev libgdbm-compat-dev liblzma-dev libexpat1-dev \
+  libcrypt-dev libdb-dev
 ```
 
-## notes
-- the current setup currently can only generate modified `compiled.code` files.
-- during my testing of loading `*.ccp` the game always failed to accept them.  As EVECC reuses CCP's crypt keys, we should have no issues loading them without patching keys.
+Python **3** is optional for the standalone smoke test; the application itself
+uses **embedded Python 2.7.13** to preserve historical bytecode compatibility.
+Python 2.7 is no longer maintained and is deliberately isolated inside EVECC.
+
+### 2. Clone the Linux development branch and all submodules
+
+Until the native code is merged, you **must check out `linux-native-port`**.
+Cloning the default `main` branch alone will give you the older Windows-only code.
+
+```bash
+git clone --branch linux-native-port --recurse-submodules \
+  https://github.com/xrizonx/evecc-rebuild.git
+cd evecc-rebuild
+git submodule update --init --recursive
+```
+
+The required submodules include `python-cmake-buildsystem`, `crc32c`, `loguru`,
+`inih`, `uncompyle2`, and `uncompyle6`. The build now automatically
+bundles the Python 2-compatible `xdis 6.1.1`, `spark-parser 1.9.0`,
+`click 7.1.2`, and `six 1.16.0` wheels inside `uncompyle6.zip`, with
+**SHA-256 verification** and a reusable `build/wheel-cache/`. The EVECC
+decompiler uses `uncompyle2` first and retries with `uncompyle6` on failure.
+No system Python 2 packages or `pip install` are required. The first build
+downloads these wheels from PyPI and Python 2.7.13 source from python.org
+(unless the downloads are cached or a local Python source tree is supplied).
+
+### 3. Configure and compile a native Linux binary
+
+For the simplest **manual local build** (without GitHub Actions), run:
+
+```bash
+bash scripts/build-linux.sh --jobs 2
+# Optional local packaging:
+bash scripts/build-linux.sh --jobs 2 --package
+# Optional local tests (requires python3 and openssl CLI):
+bash scripts/build-linux.sh --jobs 2 --test
+```
+
+The script validates the essential tools, configures native dependencies and
+builds on your own machine. When available, `ccache` automatically reuses
+GCC/Clang compilation outputs across local builds; use `--no-ccache` to
+turn that off or `--wheel-cache PATH` to share cached Python wheels. `--clang` uses a separate `build-clang/` directory
+by default. For direct CMake control, use the equivalent steps below.
+
+```bash
+cmake -S . -B build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DENABLE_SSL=OFF \
+  -DENABLE_HASHLIB=OFF \
+  -DUSE_SYSTEM_OpenSSL=OFF
+
+cmake --build build --parallel 2
+```
+
+**Why disable Python `_ssl` and `_hashlib`?** Those old Python 2.7 modules
+do not compile cleanly against current OpenSSL. They are not EVECC's crypto
+engine; the Linux EVECC executable separately links native `OpenSSL::Crypto`.
+The obsolete `_curses` modules are also disabled internally by CMake.
+
+Use `--parallel 2` on machines with limited RAM; raise it if you have more
+memory. To build using Clang instead, configure a new build directory:
+
+```bash
+sudo apt install -y clang
+CC=clang CXX=clang++ cmake -S . -B build-clang -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build-clang --parallel 2
+```
+
+The program and bundled runtime are expected at:
+
+```text
+build/
+├── evecc                     # Native Linux ELF binary
+└── Python/
+    ├── lib/python2.7/        # Linux Python 2.7.13 standard library
+    ├── uncompyle2.zip
+    └── uncompyle6.zip        # uncompyle6 + xdis + spark_parser + click + six
+```
+
+### Alternative: compile and run in Docker (still native Linux)
+
+Docker builds a **native Linux ELF executable**, not a Windows executable under
+Wine. The multi-stage `Dockerfile` uses Debian 12, caches the Python compiler
+and SHA-verified decompiler wheels, and produces a small non-root runtime image.
+Docker only needs to be installed on your build machine; no hosted CI/CD runs.
+
+```bash
+# Use a Docker installation that supports BuildKit/buildx.
+docker build --target runtime --build-arg BUILD_JOBS=2 \
+  -t evecc-native:local .
+
+# Inspect CLI help. ./work is mounted for persistent keys and files.
+mkdir -p work
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$(pwd)/work:/work" --network none \
+  evecc-native:local --help
+
+# Export the native ELF + Python package as a .tar.gz on your host.
+mkdir -p dist
+docker build --target release-archive \
+  --output type=local,dest=dist .
+```
+
+Docker builds run the synthetic smoke tests by default and **fail** if a
+test fails. See **[docs/docker.md](docs/docker.md)** for installation,
+volume permissions, offline caches, Compose usage, and troubleshooting.
+A Dockerfile is provided; **no prebuilt image has been published or
+verified in this environment**, which has no Docker daemon.
+
+### 4. Check the locally built binary (no CI/CD)
+
+```bash
+file build/evecc
+ldd build/evecc
+./build/evecc --help
+```
+
+`file` should report an **ELF 64-bit** executable. `ldd` should list Linux
+system libraries and **must not** report `not found` for any dependency.
+
+Once compiled, optional synthetic end-to-end validation is available with:
+
+```bash
+sudo apt install -y python3 openssl
+python3 tests/native_smoke.py "$(realpath build/evecc)"
+```
+
+This test uses generated keys; it does not prove compatibility with your real
+client `blue.dll` or `compiled.code`. You should validate those separately
+using files you are authorized to use.
+
+### 5. Build a portable Linux archive
+
+```bash
+cmake --build build --target package
+ls -lh build/evecc-Linux-*.tar.gz
+```
+
+This produces a `.tar.gz` containing the Linux ELF executable and Python
+runtime directory. It is **not a fully static executable**: the host still
+needs compatible Linux C/C++ and crypto shared libraries. Packaging does not
+require 7-Zip, GitHub Actions or Docker.
+
+### 6. Work with legacy EVE client code
+
+Run commands in a writable working directory because key files and build cache
+are stored relative to the current directory.
+
+```bash
+mkdir -p work
+cd work
+
+# Create your own signing key pair.
+../build/evecc genkeys --password 'choose-a-unique-password'
+
+# Extract *data* blobs from a client blue.dll; the DLL is never executed.
+../build/evecc dumpkeys -i '/path/to/EVE/bin/blue.dll'
+
+# Extract/decompile an original file.
+../build/evecc dumpcode --password 'choose-a-unique-password' \
+  -i '/path/to/EVE/script/compiled.code' -o eve_code
+
+# Recompile source trees, preserving their script/carbon/eve layout.
+../build/evecc compilecode --password 'choose-a-unique-password' \
+  -o compiled.code \
+  -I '/path/to/source/script/carbon/client' \
+  -I '/path/to/source/script/carbon/common' \
+  -I '/path/to/source/script/eve/common' \
+  -I '/path/to/source/script/eve/client'
+```
+
+You can also run `./build/evecc console`, `runscript -i <file>`,
+`unpyj -i <file> -o <file>`, and `--help`. `console` and `runscript` work with
+the embedded interpreter without requiring EVE key files; cryptographic
+operations do still require valid keys. Use `--no-cache` to force recompilation. `cleancache` removes
+the local `.build_cache` folder.
+
+**Key files are not overwritten automatically.** If you already have an
+`evecc.keys.pub`/`evecc.keys.priv` pair or extracted `ccp.keys.*` files,
+back them up before regeneration. A different signing key invalidates previously
+signed output unless the matching public key is deployed. `dumpcode` also
+requires an output directory that does not already exist, to avoid mixing old
+and new extracted sources.
+
+**Keep `evecc.keys.priv` and `ccp.keys.crypt` private.** Generated `compiled.code`
+may still need the **external** `eveloader2` public-key patch on its supported
+platform. The EVE game client and `eveloader2` are separate projects and are
+not part of this native Linux build.
+
+### Troubleshooting local builds
+
+| Error or symptom | Solution |
+| --- | --- |
+| `vendor/...` directory missing | Run `git submodule update --init --recursive` |
+| `Python.h: No such file` | Ensure you are on `linux-native-port`; use a clean build directory |
+| `io.h: No such file` | Your build must not include Python's `PC/pyconfig.h` on Linux; pull the latest branch |
+| `makedev` / `major` / `minor` undefined | Pull latest CMake compatibility fixes; remove old `build` and reconfigure |
+| `_cursesmodule.c` fails against ncurses | Use latest branch; CMake sets `ENABLE_CURSES=OFF` |
+| `_ssl` / `_hashlib` against OpenSSL 3 fails | Use the exact CMake options shown above |
+| `Missing embedded Python runtime` | Keep `build/evecc` beside `build/Python/`; on Linux the standard library lives under `Python/lib/python2.7/` |
+| Missing shared library reported by `ldd` | Install the matching library package on the target Linux system |
+| Key loading/signature fails | Validate `blue.dll` version, generated key blobs and password; CryptoAPI compatibility needs real-client testing |
+| Build runs out of RAM | Retry with `cmake --build build --parallel 1` |
+
+For additional rationale, caveats and details, see
+**[docs/linux.md](docs/linux.md)**.
+
+## Windows (legacy tooling)
+
+The historical Windows build requires Visual Studio 2022 C++ Build Tools,
+the Windows 10/11 SDK, CMake, Ninja, and a **native Windows zlib** development
+library that CMake can discover (for example, zlib from vcpkg for your MSVC
+architecture). If CMake cannot find zlib, configure its toolchain or supply
+`-DZLIB_ROOT=<path-to-native-zlib>`. Its previous instructions used
+`C:\Program Files\7-Zip\7z.exe` and `python27.lib`; the cross-platform CMake
+work replaces the hard-coded Windows packaging path with CPack.
+
+```bat
+git clone --branch linux-native-port --recurse-submodules https://github.com/xrizonx/evecc-rebuild.git
+cd evecc-rebuild
+cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-win --parallel 2
+```
+
+Run the Windows commands from an appropriate **Visual Studio x64 Developer
+Command Prompt**. Windows builds after the CMake refactor have not yet been
+re-validated; use the last known-good Windows release if you need it immediately.
+
+A safer Windows example is in `build_and_run.bat`: it reads `EVECC_DIR`,
+`EVE_SOURCE_DIR`, and `EVECC_PASSWORD` from your environment and optionally
+copies the result to `EVELOADER2_SCRIPT_DIR`. It **does not** delete client
+files or automatically launch the game. Review all paths and make a backup
+before running it.
+
+## Second-pass source and documentation audit
+
+The [audit checklist](docs/audit.md) records which first-party files were
+reviewed, defects corrected, manual checks available, and unresolved tests.
+Notable corrections include the CryptoAPI RSA private-key encryption offset,
+Windows `-k ccp` key selection, extraction output safety, the old bundled
+zlib header collision, key-file overwrite protection, and improved Linux
+runtime documentation. The `.gitignore` now excludes client key material and
+local build files to help prevent accidental commits.
+
+**Only the actual Linux native build and compatibility with your original
+client files can determine whether all commands work correctly.** No new
+CI/CD build or workflow is included.
+
+## Port progress
+
+| Area | State |
+| --- | --- |
+| Cross-platform CLI / Windows-specific arguments | Implemented; needs build verification |
+| Portable filesystem, timestamps and cache | Implemented; needs runtime verification |
+| Linux CMake, GCC/Clang and CPack archive | Implemented; needs local compile validation |
+| Embedded Python 2.7.13 | Configured; modern Linux compatibility work ongoing |
+| OpenSSL RSA/SHA1 and 3DES legacy key support | Implemented experimentally; verify against original client files |
+| Synthetic local test harness | Added; not yet fully validated |
+| `compilelib` / `dumplib` | Reworked experimental encrypted-library ZIP import/export; synthetic test added, real-client verification pending |
+| `uncompyle6` runtime dependencies | SHA-256-pinned Py2 wheels bundled in `uncompyle6.zip`; integration test pending |
+| Native Docker build/image/archive | Multi-stage Dockerfile, BuildKit caching, Compose and export; local build pending |
+| External `eveloader2` and EVE client | Out of scope for this repository |
+| GitHub Actions CI/CD | Disabled; manual local builds only |
+| Second-pass first-party code review | Completed; see `docs/audit.md` for findings and remaining verification |
+| `scripts/build-linux.sh` helper | Implemented; no hosted build service required |
+
+**Important:** Third-party packages have their own licenses, including the
+GPL-3.0 `uncompyle6` dependency. Bundled wheel metadata and the uncompyle6
+license are retained inside the ZIP. Review license obligations before
+redistributing a package or image.
+
+EVECC preserves historical Python 2.7, SHA-1 and 3DES for
+format compatibility. Do not expose it as a network service or reuse these
+algorithms for new security-sensitive applications.

@@ -1,34 +1,35 @@
 #pragma once
 
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <string>
+#include <system_error>
 
 template <typename T, size_t N>
-constexpr size_t countof(T(&)[N]) {
-	return N;
-}
+constexpr size_t countof(T(&)[N]) { return N; }
 
 #pragma pack(push, 1)
 struct PyPacket {
-	uint32_t unk1; // Always 1
-	char uhh[2]; // Always Py (0x50 0x79)
-	char uhh1; // 1b
-	char uhh2; // 1e
-	uint32_t not_size;
-	//char uhh3; // 38
-	//char uhh4; // 00
-	//char uhh5; // 00
-	//char uhh6; // 00
-	uint32_t unk2; // Always ffffffff ; One of the colloring may be the CRC?
-	uint32_t unk3; // Always 00000000
-
+    uint32_t unk1;
+    char uhh[2];
+    char uhh1;
+    char uhh2;
+    uint32_t not_size;
+    uint32_t unk2;
+    uint32_t unk3;
 };
-#pragma pack()
+#pragma pack(pop)
 
-#define HasFile(name) !(INVALID_FILE_ATTRIBUTES == GetFileAttributes(name) && GetLastError() == ERROR_FILE_NOT_FOUND)
+inline bool HasFile(const char* name) {
+    if (name == nullptr) return false;
+    std::error_code error;
+    return std::filesystem::exists(name, error) && !error;
+}
 
-void *memmem(const void *l, size_t l_len, const void *s, size_t s_len);
+void* find_memory_pattern(const void* haystack, size_t haystack_size,
+                          const void* needle, size_t needle_size);
 wchar_t* chartow(const char* text);
-int hctoi(const char h);
-const char *str_ext(const char *filename);
+int hctoi(char digit);
+const char* str_ext(const char* filename);
 std::string get_last_error_string();

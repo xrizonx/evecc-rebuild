@@ -1,0 +1,21 @@
+# docker compose build      -> native Linux image, fully local
+# docker compose run --rm evecc --help
+# Bind-mounted ./work persists keys and compiled files outside the container.
+services:
+  evecc:
+    image: evecc-native:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        BUILD_JOBS: "${EVECC_BUILD_JOBS:-2}"
+        RUN_TESTS: "${EVECC_RUN_TESTS:-1}"
+    working_dir: /work
+    volumes:
+      - ./work:/work
+    entrypoint: ["/opt/evecc/evecc"]
+    command: ["--help"]
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
