@@ -28,7 +28,7 @@ Windows `python27.lib` is needed to compile the Linux version.
 ```bash
 sudo apt update
 sudo apt install -y --no-install-recommends \
-  git ca-certificates file build-essential cmake ninja-build pkg-config \
+  git ca-certificates file build-essential cmake ninja-build ccache pkg-config \
   libssl-dev zlib1g-dev libbz2-dev libffi-dev \
   libreadline-dev libsqlite3-dev libncurses-dev \
   libgdbm-dev libgdbm-compat-dev liblzma-dev libexpat1-dev \
@@ -74,7 +74,9 @@ bash scripts/build-linux.sh --jobs 2 --test
 ```
 
 The script validates the essential tools, configures native dependencies and
-builds on your own machine. `--clang` uses a separate `build-clang/` directory
+builds on your own machine. When available, `ccache` automatically reuses
+GCC/Clang compilation outputs across local builds; use `--no-ccache` to
+turn that off or `--wheel-cache PATH` to share cached Python wheels. `--clang` uses a separate `build-clang/` directory
 by default. For direct CMake control, use the equivalent steps below.
 
 ```bash
