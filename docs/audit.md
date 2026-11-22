@@ -35,6 +35,9 @@ every upstream third-party dependency**.
 | Packaging | Readme referred to a Linux guide that was not in the package | Package Linux guide, root README, license and runtime |
 | Secret hygiene | Generated private key files could be accidentally committed | `.gitignore` exclusions for keys, artifacts, build output and logs |
 | Documentation | Linux guide had malformed escape sequences and incomplete copy/paste commands | Rewrite step by step, with expected results, troubleshooting and non-CI tests |
+| Python 2 decompiler dependencies | Optional `uncompyle6` was bundled without `xdis`, `spark-parser`, `click` and `six` | SHA-256-pin Python 2 wheels; package their modules and license metadata into one ZIP; extend smoke test to import everything |
+| Decompiler compatibility | No fallback when `uncompyle2` failed to reconstruct bytecode | Retry with bundled `uncompyle6`, propagating both errors instead of silently succeeding |
+| Container build | No native Linux Docker image or reproducible archive export | Multi-stage Debian 12 Dockerfile, BuildKit incremental/ccache/wheel caches, non-root offline runtime and Compose workflow |
 
 ## Documentation review: end-user workflow
 
@@ -73,13 +76,31 @@ port finished:
 - Native Windows build regression tests, particularly key generation,
   crypto operations and CMake packaging.
 - The upstream `compilelib` and `dumplib` modes, originally marked nonfunctional.
-- The optional `uncompyle6` Python dependencies (`xdis` and `spark-parser`).
+- `uncompyle6` dependencies are now bundled from pinned Python 2 wheels,
+  but a clean native import/decompiler round-trip still requires local validation.
 - External EVE client/eveloader2 Linux support: **out of scope**, because
   neither project is part of this repository.
 
 These are not claimed to be fixed or passing merely because source changes
 were committed. Python 2.7, RC4, SHA-1 and 3DES remain obsolete and are
 retained only to match legacy file formats.
+
+## Native Docker image and wheel-closure audit
+
+- A checksum-verified `uncompyle6.zip` now includes Python 2 source for
+  `uncompyle6`, `xdis 6.1.1`, `spark_parser 1.9.0`, `click 7.1.2`
+  and `six 1.16.0`. Bundled wheel metadata preserves transitive licenses.
+- New local smoke test imports all five Python modules from the embedded
+  interpreter and fails if any required package cannot be imported.
+- Multi-stage Debian 12 Docker image builds a native Linux binary with
+  BuildKit cache mounts and can export a standalone CPack archive.
+- Docker tests run by default, but a Docker daemon was not available in
+  the development environment for a complete image build. **Docker and
+  bundled-runtime verification are not yet marked passing.**
+- `compose.yaml` runs the CLI with networking disabled by default and a
+  bind-mounted workspace; image builds require network access initially.
+- The `Dockerfile` and `docs/docker.md` give complete local build commands.
+  CI/CD remains disabled.
 
 ## Manual verification checklist (no CI/CD)
 
@@ -94,6 +115,10 @@ bash scripts/build-linux.sh --jobs 2 --test --package
 file build/evecc
 ldd build/evecc
 ./build/evecc --help
+
+# Optional, still entirely local:
+docker build --target runtime -t evecc-native:local .
+docker run --rm --network none evecc-native:local --help
 ```
 
 Expected test message: `Native Linux integration smoke test passed`.
